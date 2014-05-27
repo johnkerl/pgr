@@ -914,8 +914,7 @@ def plot_series(x_series, y_series, e_series, num_series, formats, legend_labels
 							curr_format, label=curr_legend_label, color=curr_color,
 							markerfacecolor=curr_color, markeredgecolor=curr_color,
 							markersize=opts['marker_size'],
-							linewidth=curr_line_width,
-							drawstyle='steps')
+							linewidth=curr_line_width)
 
 			plot_lines_for_figlegend.append(plot_line)
 
