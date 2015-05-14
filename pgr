@@ -313,7 +313,7 @@ def main():
 			legend_labels = opts['arg_legend_labels'].split(',')
 		else:
 			legend_labels = opts['arg_legend_labels'].split()
-		do_legend = True
+		opts['do_legend'] = True
 	colors = []
 	if opts['arg_colors'] != '':
 		if opts['split_on_comma']:
@@ -817,7 +817,7 @@ def plot_series(x_series, y_series, e_series, num_series, formats, legend_labels
 
 			if len(curr_x_series) > 0:
 				if colors == []:
-					plot_line = pylab.errorbar(
+					plot_line, = pylab.errorbar(
 						curr_x_series, \
 						curr_y_series, \
 						curr_e_series, \
@@ -826,7 +826,7 @@ def plot_series(x_series, y_series, e_series, num_series, formats, legend_labels
 						markersize=opts['marker_size'],
 						linewidth=opts['line_widths'][j % len(opts['line_widths'])])
 				else:
-					plot_line = pylab.errorbar(
+					plot_line, = pylab.errorbar(
 						curr_x_series, \
 						curr_y_series, \
 						curr_e_series, \
@@ -854,11 +854,11 @@ def plot_series(x_series, y_series, e_series, num_series, formats, legend_labels
 			# Bar-chart plot.
 			if opts['do_bar']:
 				if len(colors) > 0:
-					plot_line = pylab.bar(curr_x_series, curr_y_series, width=opts['bar_width'], \
+					plot_line, = pylab.bar(curr_x_series, curr_y_series, width=opts['bar_width'], \
 						linewidth=curr_line_width, \
 						color=colors[j % len(colors)])
 				else:
-					plot_line = pylab.bar(curr_x_series, curr_y_series, width=opts['bar_width'], \
+					plot_line, = pylab.bar(curr_x_series, curr_y_series, width=opts['bar_width'], \
 						linewidth=curr_line_width)
 
 			# Regular XY plot.
@@ -877,13 +877,13 @@ def plot_series(x_series, y_series, e_series, num_series, formats, legend_labels
 						plot_func = pylab.plot
 
 					if opts['do_steps']:
-						plot_line = plot_func(curr_x_series, curr_y_series,
+						plot_line, = plot_func(curr_x_series, curr_y_series,
 								curr_format, label=curr_legend_label,
 								markeredgewidth=0, markersize=opts['marker_size'],
 								linewidth=curr_line_width,
 								drawstyle='steps')
 					else:
-						plot_line = plot_func(curr_x_series, curr_y_series,
+						plot_line, = plot_func(curr_x_series, curr_y_series,
 								curr_format, label=curr_legend_label,
 								markeredgewidth=0, markersize=opts['marker_size'],
 								linewidth=curr_line_width)
@@ -903,14 +903,14 @@ def plot_series(x_series, y_series, e_series, num_series, formats, legend_labels
 						plot_func = pylab.plot
 
 					if opts['do_steps']:
-						plot_line = plot_func(curr_x_series, curr_y_series,
+						plot_line, = plot_func(curr_x_series, curr_y_series,
 							curr_format, label=curr_legend_label, color=curr_color,
 							markerfacecolor=curr_color, markeredgecolor=curr_color,
 							markersize=opts['marker_size'],
 							linewidth=curr_line_width,
 							drawstyle='steps')
 					else:
-						plot_line = plot_func(curr_x_series, curr_y_series,
+						plot_line, = plot_func(curr_x_series, curr_y_series,
 							curr_format, label=curr_legend_label, color=curr_color,
 							markerfacecolor=curr_color, markeredgecolor=curr_color,
 							markersize=opts['marker_size'],
