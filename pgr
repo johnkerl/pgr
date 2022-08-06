@@ -1,4 +1,4 @@
-#!/usr/bin/python -Wall
+#!/usr/bin/env python -Wall
 
 # ================================================================
 # pgr is a plotter which sends tabular data to a screen plot or image-file
@@ -108,867 +108,938 @@
 # John Kerl
 # kerl.john.r@gmail.com
 # 2008-04-13
+# Ported to Python3 2022-08-05
 # ================================================================
 
-import pylab, matplotlib
-import sys, re, copy
-from math import *
-import tabutil_m
+import datetime
+import math
+import re
+import sys
+
+import matplotlib
+import pylab
+
 
 # ----------------------------------------------------------------
 def usage():
-	print >> sys.stderr, "Usage: %s [options] [file name]" % (sys.argv[0])
-	print >> sys.stderr, "Use \"-\" as file name, or omit it, if input is stdin."
-	print >> sys.stderr, "Options:"
-	print >> sys.stderr, "  --help                 Print this message."
+    sys.stderr.write("Usage: %s [options] [file name]" % (sys.argv[0]))
+    sys.stderr.write(
+        """Use \"-\" as file name, or omit it, if input is stdin.
 
-	print >> sys.stderr, "  -title {title text}    Specify plot title."
+Options:
+  --help                 Print this message.
 
-	print >> sys.stderr, "  -xlabel {x label text} Specify x label."
-	print >> sys.stderr, "  -ylabel {y label text} Specify y label."
+  -title {title text}    Specify plot title.
 
-	print >> sys.stderr, "  -legend 'y1 y2'        Specify legend labels."
-	print >> sys.stderr, "  -lop                   Place the legend outside the plot."
-	print >> sys.stderr, "  -lip                   Place the legend inside the plot."
-	print >> sys.stderr, "  -flabels (or -f)       Take x label and legend labels from the data file."
+  -xlabel {x label text} Specify x label.
+  -ylabel {y label text} Specify y label.
 
-	print >> sys.stderr, "  -width {inches}        Specify figure width."
-	print >> sys.stderr, "  -height {inches}       Specify figure height."
+  -legend 'y1 y2'        Specify legend labels.
+  -lop                   Place the legend outside the plot.
+  -lip                   Place the legend inside the plot.
+  -flabels (or -f)       Take x label and legend labels from the data file.
 
-	print >> sys.stderr, "  -xmin {xmin}:          Specify manual bounds."
-	print >> sys.stderr, "  -xmax {xmax}:          Specify manual bounds."
-	print >> sys.stderr, "  -ymin {ymin}:          Specify manual bounds."
-	print >> sys.stderr, "  -ymax {ymax}:          Specify manual bounds."
+  -width {inches}        Specify figure width.
+  -height {inches}       Specify figure height.
 
-	print >> sys.stderr, "  -grid                  Include a background grid."
+  -xmin {xmin}:          Specify manual bounds.
+  -xmax {xmax}:          Specify manual bounds.
+  -ymin {ymin}:          Specify manual bounds.
+  -ymax {ymax}:          Specify manual bounds.
 
-	print >> sys.stderr, "  -c                     Use comma as column delimiter."
-	print >> sys.stderr, "  -nc                    Do not use comma as column delimiter."
+  -grid                  Include a background grid.
 
-	print >> sys.stderr, "  -t                     X coordinate is time."
-	print >> sys.stderr, "  -n                     Take x coordinate from line number."
+  -c                     Use comma as column delimiter.
+  -nc                    Do not use comma as column delimiter.
 
-	print >> sys.stderr, "  -l                     Draw lines only."
-	print >> sys.stderr, "  -p                     Draw points only."
-	print >> sys.stderr, "  -lp                    Draw lines and points."
-	print >> sys.stderr, "  -ms {n}                Marker size (default 5) for points."
-	print >> sys.stderr, "  -steps                 Draw step-style lines."
-	print >> sys.stderr, "  -nosteps               Draw point-to-point lines."
-	print >> sys.stderr, "  -formats '- -- o'      Specify pylab-style marker formats."
-	print >> sys.stderr, "                         Examples:"
-	print >> sys.stderr, "        - solid line       --    dashed line       -.    dash-dot line"
-	print >> sys.stderr, "        : dotted line      .     points            o     circle symbols"
-	print >> sys.stderr, "        s square symbols   +     plus symbols      x     cross symbols"
-	print >> sys.stderr, "        Type \"help(pylab.plot)\", after \"import pylab\", inside Python for more"
-	print >> sys.stderr, "        information."
-	print >> sys.stderr, "  -colors 'red blue green' Specify line colors."
-	print >> sys.stderr, "  -greyup                First series is light grey ... last series is black."
-	print >> sys.stderr, "  -greydown              First series is black ... last series is light grey."
+  -t                     X coordinate is time.
+  -n                     Take x coordinate from line number.
 
-	print >> sys.stderr, "  -lines                 Line-draw mode.  Input should be"
-	print >> sys.stderr, "                         quadruples of x1 y1 x2 y2."
-	print >> sys.stderr, "  -xyxy                  1st column is x1, 2nd is y1, 3rd is x2, 4th is y2, ...."
-	print >> sys.stderr, "                         Otherwise, a single x column is used for all y columns."
+  -l                     Draw lines only.
+  -p                     Draw points only.
+  -lp                    Draw lines and points.
+  -ms {n}                Marker size (default 5) for points.
+  -steps                 Draw step-style lines.
+  -nosteps               Draw point-to-point lines.
+  -formats '- -- o'      Specify pylab-style marker formats.
+                         Examples:
+        - solid line       --    dashed line       -.    dash-dot line
+        : dotted line      .     points            o     circle symbols
+        s square symbols   +     plus symbols      x     cross symbols
+        Type "help(pylab.plot)", after "import pylab", inside Python for more
+        information.
+  -colors 'red blue green' Specify line colors.
+  -greyup                First series is light grey ... last series is black.
+  -greydown              First series is black ... last series is light grey.
 
-	print >> sys.stderr, "  -errorbar or -eb       1st column is  x, 2nd is y, 3rd is err(y)."
-	print >> sys.stderr, "  -bar                   Plot a bar chart."
-	print >> sys.stderr, "  -barwidth {w}          Specify bar width for -bar."
-	print >> sys.stderr, "  -lct                   Plot last column on top."
-	print >> sys.stderr, "  -fct                   Plot first column on top."
+  -lines                 Line-draw mode.  Input should be
+                         quadruples of x1 y1 x2 y2.
+  -xyxy                  1st column is x1, 2nd is y1, 3rd is x2, 4th is y2, ....
+                         Otherwise, a single x column is used for all y columns.
 
-	print >> sys.stderr, "  -1ox,-1my              Compute 1/input or 1-output before plotting."
-	print >> sys.stderr, "  -colscale {a b c ...}  Multiply column 1 by a, column 2 by b, ..."
-	print >> sys.stderr, "  -logx,-logy,-loglog    Plot log of input, output, or both."
+  -errorbar or -eb       1st column is  x, 2nd is y, 3rd is err(y).
+  -bar                   Plot a bar chart.
+  -barwidth {w}          Specify bar width for -bar.
+  -lct                   Plot last column on top.
+  -fct                   Plot first column on top.
 
-	print >> sys.stderr, "  -o {file name}         Write file instead of graphing."
-	print >> sys.stderr, "                         Formats: .png, .eps."
-	print >> sys.stderr, "  -dpi {number}          Dots per inch for -o."
-	sys.exit(1)
+  -1ox,-1my              Compute 1/input or 1-output before plotting.
+  -colscale {a b c ...}  Multiply column 1 by a, column 2 by b, ...
+  -logx,-logy,-loglog    Plot log of input, output, or both.
+
+  -o {file name}         Write file instead of graphing.
+                         Formats: .png, .eps.
+  -dpi {number}          Dots per inch for -o.
+"""
+    )
+
+    sys.exit(1)
+
 
 # ----------------------------------------------------------------
 def main():
-	opts = set_defaults()
-	parse_command_line(opts)
-	(file_columns, legend_labels) = read_input_file(opts)
+    opts = set_defaults()
+    parse_command_line(opts)
+    (file_columns, legend_labels) = read_input_file(opts)
 
-	# debug tap:
-	# tabutil_m.float_columns_to_file(file_columns, '-')
+    # debug tap:
+    # float_columns_to_file(file_columns, '-')
 
-	# Do line plot.
-	if opts['do_lines']:
-		plot_lines(file_columns, opts)
-		sys.exit(0)
+    # Do line plot.
+    if opts["do_lines"]:
+        #        plot_lines(file_columns, opts)
+        sys.exit(0)
 
-	# Rearrange file columns into some combination of x, y, and error-bar series.
-	# We will then have:
-	# * x_series
-	# * y_series
-	# * e_series
-	# * num_series
-	x_series = []
-	y_series = []
-	e_series = []
-	if len(file_columns) == 1:
-		opts['x_is_line_number'] = True
+    # Rearrange file columns into some combination of x, y, and error-bar series.
+    # We will then have:
+    # * x_series
+    # * y_series
+    # * e_series
+    # * num_series
 
-	if opts['multiple_x_columns'] and do_errorbar:
-		print >> sys.stderr, \
-			'%s: Sorry, the code to use -xyxy and -eb together hasn\'t been written yet.' \
-			% sys.argv[0]
-		sys.exit(1)
+    x_series = []
+    y_series = []
+    e_series = []
+    if len(file_columns) == 1:
+        opts["x_is_line_number"] = True
 
-	if opts['multiple_x_columns'] and x_is_line_number:
-		print >> sys.stderr, \
-			'%s: Sorry, the code to use -xyxy and -n together hasn\'t been written yet.' \
-			% sys.argv[0]
-		sys.exit(1)
+    if opts["multiple_x_columns"] and opts["do_errorbar"]:
+        sys.stderr.write(
+            "%s: Sorry, the code to use -xyxy and -eb together hasn't been written yet."
+            % sys.argv[0]
+        )
+        sys.exit(1)
 
-	# Rearrange XYXY-format data.
-	if opts['multiple_x_columns']:
-		if (len(file_columns) % 2) != 0:
-			print >> sys.stderr, "XYXY plot needs an even number of data columns."
-			sys.exit(1)
+    if opts["multiple_x_columns"] and opts["x_is_line_number"]:
+        sys.stderr.write(
+            "%s: Sorry, the code to use -xyxy and -n together hasn't been written yet."
+            % sys.argv[0]
+        )
+        sys.exit(1)
 
-		# Before:  file_columns looks like this:  |  After:  x_series looks like this:
-		#   Column 0: x1 data                     |    0: x1 data
-		#   Column 1: y1 data                     |    1: x2 data
-		#   Column 2: x2 data                     |  and y_series looks like this:
-		#   Column 3: y2 data                     |    0: y1 data
-		#                                         |    1: y2 data
-		num_series = int(len(file_columns) / 2)
-		x_series = [[]] * num_series
-		y_series = [[]] * num_series
-		for j in range(0, num_series):
-			x_series[j] = file_columns[2*j]
-			y_series[j] = file_columns[2*j+1]
-			print
-			print 'j=%d x_series=%s' % (j, str(x_series[j]))
-			print 'j=%d y_series=%s' % (j, str(y_series[j]))
+    # Rearrange XYXY-format data.
+    if opts["multiple_x_columns"]:
+        if (len(file_columns) % 2) != 0:
+            sys.stderr.write("XYXY plot needs an even number of data columns.")
+            sys.exit(1)
 
-	# Use line number as first column, if requested.
-	elif opts['x_is_line_number']:
-		n = len(file_columns[0])
-		x_series = [range(0, n)]
-		y_series = file_columns
-	else:
-		x_series = [file_columns[0]]
-		y_series = file_columns[1:]
-	num_series = len(y_series)
+        # Before:  file_columns looks like this:  |  After:  x_series looks like this:
+        #   Column 0: x1 data                     |    0: x1 data
+        #   Column 1: y1 data                     |    1: x2 data
+        #   Column 2: x2 data                     |  and y_series looks like this:
+        #   Column 3: y2 data                     |    0: y1 data
+        #                                         |    1: y2 data
+        num_series = int(len(file_columns) / 2)
+        x_series = [[]] * num_series
+        y_series = [[]] * num_series
+        for j in range(0, num_series):
+            x_series[j] = file_columns[2 * j]
+            y_series[j] = file_columns[2 * j + 1]
+            print
+            print("j=%d x_series=%s" % (j, str(x_series[j])))
+            print("j=%d y_series=%s" % (j, str(y_series[j])))
 
-	# Make sure there are an even number of y series, if we're doing an errorbar
-	# plot.  Then, separate out data columns from error columns.
-	if opts['do_errorbar']:
-		if (num_series % 2) != 0:
-			print >> sys.stderr, "Error-bar plot needs an even number of y data columns."
-			sys.exit(1)
+    # Use line number as first column, if requested.
+    elif opts["x_is_line_number"]:
+        n = len(file_columns[0])
+        x_series = [range(0, n)]
+        y_series = file_columns
+    else:
+        x_series = [file_columns[0]]
+        y_series = file_columns[1:]
+    num_series = len(y_series)
 
-		# Before:  y_series looks like this:  |  After:  y_series looks like this:
-		#   Column 0: y1 data                 |    0: y1 data
-		#   Column 1: y1 error                |    1: y2 data
-		#   Column 2: y2 data                 |  and e_series looks like this:
-		#   Column 3: y2 error                |    0: y1 error
-		# and e_series is empty.              |    1: y2 error
-		num_series = int(num_series / 2)
-		temp = y_series
-		y_series = [[]] * num_series
-		e_series = [[]] * num_series
-		for j in range(0, num_series):
-			y_series[j] = temp[2*j]
-			e_series[j] = temp[2*j+1]
+    # Make sure there are an even number of y series, if we're doing an errorbar
+    # plot.  Then, separate out data columns from error columns.
+    if opts["do_errorbar"]:
+        if (num_series % 2) != 0:
+            sys.stderr.write("Error-bar plot needs an even number of y data columns.")
+            sys.exit(1)
 
-		# If the error columns are estimated variances, square-root them.
-		if opts['eb_is_var']:
-			for j in range(0, num_series):
-				var = e_series[j]
-				for i in range(0, len(e_series[j])):
-					e_series[j][i] = sqrt(e_series[j][i])
+        # Before:  y_series looks like this:  |  After:  y_series looks like this:
+        #   Column 0: y1 data                 |    0: y1 data
+        #   Column 1: y1 error                |    1: y2 data
+        #   Column 2: y2 data                 |  and e_series looks like this:
+        #   Column 3: y2 error                |    0: y1 error
+        # and e_series is empty.              |    1: y2 error
+        num_series = int(num_series / 2)
+        temp = y_series
+        y_series = [[]] * num_series
+        e_series = [[]] * num_series
+        for j in range(0, num_series):
+            y_series[j] = temp[2 * j]
+            e_series[j] = temp[2 * j + 1]
 
-	# These are the default formats.
-	format="-"
-	if opts['draw_points']:
-		if opts['draw_connectors']:
-			format="o-"
-		else:
-			format="o"
-	else:
-		if opts['draw_connectors']:
-			format="-"
-		else:
-			# At least one of draw_points and draw_connectors must be
-			# specified.  The command-line parser shouldn't have allowed this.
-			print >> sys.stderr, "plot_series:  coding error."
-			sys.exit(1)
-	formats = [format] * num_series
-	if not opts['use_file_labels']:
-		legend_labels  = [''] * num_series
+        # If the error columns are estimated variances, square-root them.
+        if opts["eb_is_var"]:
+            for j in range(0, num_series):
+                for i in range(0, len(e_series[j])):
+                    e_series[j][i] = math.sqrt(e_series[j][i])
 
-	# Use specified formats, if any.
-	if opts['arg_formats'] != '':
-		if opts['split_on_comma']:
-			formats = opts['arg_formats'].split(',')
-		else:
-			formats = opts['arg_formats'].split()
-	if opts['arg_legend_labels'] != '':
-		if opts['split_on_comma']:
-			legend_labels = opts['arg_legend_labels'].split(',')
-		else:
-			legend_labels = opts['arg_legend_labels'].split()
-		opts['do_legend'] = True
-	colors = []
-	if opts['arg_colors'] != '':
-		if opts['split_on_comma']:
-			colors = opts['arg_colors'].split(',')
-		else:
-			colors = opts['arg_colors'].split()
+    # These are the default formats.
+    format = "-"
+    if opts["draw_points"]:
+        if opts["draw_connectors"]:
+            format = "o-"
+        else:
+            format = "o"
+    else:
+        if opts["draw_connectors"]:
+            format = "-"
+        else:
+            # At least one of draw_points and draw_connectors must be
+            # specified.  The command-line parser shouldn't have allowed this.
+            sys.stderr.write("plot_series:  coding error.")
+            sys.exit(1)
+    formats = [format] * num_series
+    if not opts["use_file_labels"]:
+        legend_labels = [""] * num_series
 
-	# Grey
-	if opts['do_colors_grey']:
-		if num_series == 1:
-			colors = ['0.0']
-		else:
-			lo = 0.8 # light grey
-			hi = 0.0 # black
-			colors = []
-			for i in range(0, num_series):
-				float_color = lo + (hi-lo) * float(i)/float(num_series-1)
-				colors.append('%f' % float_color)
-			if opts['do_colors_grey'] < 0:
-				colors.reverse()
+    # Use specified formats, if any.
+    if opts["arg_formats"] != "":
+        if opts["split_on_comma"]:
+            formats = opts["arg_formats"].split(",")
+        else:
+            formats = opts["arg_formats"].split()
+    if opts["arg_legend_labels"] != "":
+        if opts["split_on_comma"]:
+            legend_labels = opts["arg_legend_labels"].split(",")
+        else:
+            legend_labels = opts["arg_legend_labels"].split()
+        opts["do_legend"] = True
+    colors = []
+    if opts["arg_colors"] != "":
+        if opts["split_on_comma"]:
+            colors = opts["arg_colors"].split(",")
+        else:
+            colors = opts["arg_colors"].split()
 
-	# Optionally remap.  These really aren't drawing-program tasks; a separate
-	# script could do them.  Log remap is handled by pylab's log-plot feature,
-	# so we don't do it here.
-	n = len(y_series[0])
+    # Grey
+    if opts["do_colors_grey"]:
+        if num_series == 1:
+            colors = ["0.0"]
+        else:
+            lo = 0.8  # light grey
+            hi = 0.0  # black
+            colors = []
+            for i in range(0, num_series):
+                float_color = lo + (hi - lo) * float(i) / float(num_series - 1)
+                colors.append("%f" % float_color)
+            if opts["do_colors_grey"] < 0:
+                colors.reverse()
 
-	if opts['xshift'] != 0.0:
-		for i in range(0, n):
-			for j in range(0, len(x_series)):
-				x_series[j][i] += xshift
-	if opts['xmul'] != 1.0:
-		for i in range(0, n):
-			for j in range(0, len(x_series)):
-				x_series[j][i] *= xmul
+    # Optionally remap.  These really aren't drawing-program tasks; a separate
+    # script could do them.  Log remap is handled by pylab's log-plot feature,
+    # so we don't do it here.
+    n = len(y_series[0])
 
-	if opts['do_one_over_x']:
-		for i in range(0, n):
-			for j in range(0, len(x_series)):
-				x_series[j][i] = 1.0 / x_series[j][i]
-	if opts['do_one_minus_y']:
-		for i in range(0, n):
-			for j in range(0, num_series):
-				y_series[j][i] = 1.0 - y_series[j][i]
+    if opts["xshift"] != 0.0:
+        for i in range(0, n):
+            for j in range(0, len(x_series)):
+                x_series[j][i] += opts["xshift"]
+    if opts["xmul"] != 1.0:
+        for i in range(0, n):
+            for j in range(0, len(x_series)):
+                x_series[j][i] *= opts["xmul"]
 
-	if opts['column_scales'] != [] and opts['column_scales'] != ['']:
-		for j in range(0, len(y_series)):
-			scale = float(opts['column_scales'][j % num_series])
-			for i in range(0, n):
-				if y_series[j][i] != None:
-					y_series[j][i] *= scale
+    if opts["do_one_over_x"]:
+        for i in range(0, n):
+            for j in range(0, len(x_series)):
+                x_series[j][i] = 1.0 / x_series[j][i]
+    if opts["do_one_minus_y"]:
+        for i in range(0, n):
+            for j in range(0, num_series):
+                y_series[j][i] = 1.0 - y_series[j][i]
 
-	# Now plot the data.
-	plot_series(x_series, y_series, e_series, num_series, formats,
-		legend_labels, colors, opts)
+    if opts["column_scales"] != [] and opts["column_scales"] != [""]:
+        for j in range(0, len(y_series)):
+            scale = float(opts["column_scales"][j % num_series])
+            for i in range(0, n):
+                if y_series[j][i] is not None:
+                    y_series[j][i] *= scale
+
+    # Now plot the data.
+    plot_series(
+        x_series, y_series, e_series, num_series, formats, legend_labels, colors, opts
+    )
+
 
 # ----------------------------------------------------------------
 def set_defaults():
-	opts = {}
+    return {
+        "title": "",
+        "xlabel": "",
+        "ylabel": "",
+        "do_legend": False,
+        "split_on_comma": True,
+        "x_is_line_number": False,
+        "x_is_time": False,
+        "multiple_x_columns": 0,
+        "do_lines": False,
+        "do_errorbar": False,
+        "eb_is_var": False,
+        "do_bar": False,
+        "bar_width": 0.8,
+        "bar_width_given": 0,
+        "do_grid": 0,
+        "first_column_on_top": False,
+        "xshift": 0.0,
+        "xmul": 1.0,
+        "do_one_over_x": 0,
+        "do_one_minus_y": 0,
+        "column_scales_string": "",
+        "do_logx": 0,
+        "do_logy": 0,
+        "marker_size": 2,
+        "line_widths_string": "1",
+        "draw_points": 1,
+        "draw_connectors": 1,
+        "do_steps": 0,
+        "output_file": "",
+        "dpi": 150,
+        "arg_formats": "",
+        "arg_legend_labels": "",
+        "arg_colors": "",
+        # 0 for not doing it, +1 for light to dark (last series is black),
+        # -1 for dark to light (first series is black).
+        "do_colors_grey": 0,
+        "use_file_labels": 0,
+        "width_inches": 6,
+        "height_inches": 4,
+        "adjust_bottom": 0.15,
+        "adjust_top": 0.85,
+        "adjust_left": 0.12,
+        "adjust_right": 0.90,
+        "legend_loc": "tbd",
+        "legend_outside_plot": True,
+        "have_x_min": 0,
+        "have_x_max": 0,
+        "have_y_min": 0,
+        "have_y_max": 0,
+        "x_min": -1,
+        "x_max": -1,
+        "y_min": -1,
+        "y_max": -1,
+    }
 
-	opts['title']              = ''
-	opts['xlabel']             = ''
-	opts['ylabel']             = ''
-	opts['do_legend']          = False
-	opts['split_on_comma']     = True
-	opts['x_is_line_number']   = False
-	opts['x_is_time']          = False
-	opts['multiple_x_columns'] = 0
-	opts['do_lines']           = False
-	opts['do_errorbar']        = False
-	opts['eb_is_var']          = False
-	opts['do_bar']             = False
-	opts['bar_width']          = 0.8
-	opts['bar_width_given']    = 0
-	opts['do_grid']            = 0
-	opts['first_column_on_top']  = False
-	opts['xshift']             = 0.0
-	opts['xmul']               = 1.0
-	opts['do_one_over_x']      = 0
-	opts['do_one_minus_y']     = 0
-	opts['column_scales_string'] = ''
-	opts['do_logx']            = 0
-	opts['do_logy']            = 0
-	opts['marker_size']        = 2
-	opts['line_widths_string'] = '1'
-	opts['draw_points']        = 1
-	opts['draw_connectors']    = 1
-	opts['do_steps']           = 0
-	opts['output_file']        = ''
-	opts['dpi']                = 150
-	opts['arg_formats']        = ''
-	opts['arg_legend_labels']  = ''
-	opts['arg_colors']         = ''
-	# 0 for not doing it, +1 for light to dark (last series is black),
-	# -1 for dark to light (first series is black).
-	opts['do_colors_grey']     = 0
-	opts['use_file_labels']    = 0
-	opts['width_inches']       = 6
-	opts['height_inches']      = 4
-	opts['adjust_bottom']      = 0.15
-	opts['adjust_top']         = 0.85
-	opts['adjust_left']        = 0.12
-	opts['adjust_right']       = 0.90
-	opts['legend_loc']         = 'tbd'
-	opts['legend_outside_plot']= True
-	opts['have_x_min']         = 0
-	opts['have_x_max']         = 0
-	opts['have_y_min']         = 0
-	opts['have_y_max']         = 0
-	opts['x_min']              = -1
-	opts['x_max']              = -1
-	opts['y_min']              = -1
-	opts['y_max']              = -1
-
-	return opts
 
 # ----------------------------------------------------------------
 def parse_command_line(opts):
-	argc = len(sys.argv)
-	argi = 1
-	while argi < argc:
-		if sys.argv[argi] == '-':
-			break
-		elif sys.argv[argi][0] != '-':
-			break
-		elif sys.argv[argi] == "-h":
-			usage()
-		elif sys.argv[argi] == "--help":
-			usage()
-		elif sys.argv[argi] == "-title":
-			argi += 1
-			if argi >= argc:
-				usage()
-			opts['title'] = sys.argv[argi]
-		elif sys.argv[argi] == "-xlabel":
-			argi += 1
-			if argi >= argc:
-				usage()
-			opts['xlabel'] = sys.argv[argi]
-		elif sys.argv[argi] == "-ylabel":
-			argi += 1
-			if argi >= argc:
-				usage()
-			opts['ylabel'] = sys.argv[argi]
+    argc = len(sys.argv)
+    argi = 1
+    while argi < argc:
+        if sys.argv[argi] == "-":
+            break
+        elif sys.argv[argi][0] != "-":
+            break
+        elif sys.argv[argi] == "-h":
+            usage()
+        elif sys.argv[argi] == "--help":
+            usage()
+        elif sys.argv[argi] == "-title":
+            argi += 1
+            if argi >= argc:
+                usage()
+            opts["title"] = sys.argv[argi]
+        elif sys.argv[argi] == "-xlabel":
+            argi += 1
+            if argi >= argc:
+                usage()
+            opts["xlabel"] = sys.argv[argi]
+        elif sys.argv[argi] == "-ylabel":
+            argi += 1
+            if argi >= argc:
+                usage()
+            opts["ylabel"] = sys.argv[argi]
 
-		elif sys.argv[argi] == "-d": # -f and -t; dcat style
-			opts['use_file_labels'] = 1
-			opts['do_legend'] = True
-			opts['x_is_time'] = True
-		elif sys.argv[argi] == "-k": # my style
-			opts['use_file_labels'] = 1
-			opts['do_legend'] = True
-			opts['split_on_comma'] = False
+        elif sys.argv[argi] == "-d":  # -f and -t; dcat style
+            opts["use_file_labels"] = 1
+            opts["do_legend"] = True
+            opts["x_is_time"] = True
+        elif sys.argv[argi] == "-k":  # my style
+            opts["use_file_labels"] = 1
+            opts["do_legend"] = True
+            opts["split_on_comma"] = False
 
-		elif sys.argv[argi] == "-flabels":
-			opts['use_file_labels'] = 1
-			opts['do_legend'] = True
-		elif sys.argv[argi] == "-f":
-			opts['use_file_labels'] = 1
-			opts['do_legend'] = True
-		elif sys.argv[argi] == "-width":
-			argi += 1
-			if argi >= argc:
-				usage()
-			opts['width_inches'] = float(sys.argv[argi])
-		elif sys.argv[argi] == "-height":
-			argi += 1
-			if argi >= argc:
-				usage()
-			opts['height_inches'] = float(sys.argv[argi])
+        elif sys.argv[argi] == "-flabels":
+            opts["use_file_labels"] = 1
+            opts["do_legend"] = True
+        elif sys.argv[argi] == "-f":
+            opts["use_file_labels"] = 1
+            opts["do_legend"] = True
+        elif sys.argv[argi] == "-width":
+            argi += 1
+            if argi >= argc:
+                usage()
+            opts["width_inches"] = float(sys.argv[argi])
+        elif sys.argv[argi] == "-height":
+            argi += 1
+            if argi >= argc:
+                usage()
+            opts["height_inches"] = float(sys.argv[argi])
 
-		elif sys.argv[argi] == "-adjbottom":
-			argi += 1
-			if argi >= argc:
-				usage()
-			opts['adjust_bottom'] = float(sys.argv[argi])
-		elif sys.argv[argi] == "-adjtop":
-			argi += 1
-			if argi >= argc:
-				usage()
-			opts['adjust_top'] = float(sys.argv[argi])
-		elif sys.argv[argi] == "-adjleft":
-			argi += 1
-			if argi >= argc:
-				usage()
-			opts['adjust_left'] = float(sys.argv[argi])
-		elif sys.argv[argi] == "-adjright":
-			argi += 1
-			if argi >= argc:
-				usage()
-			opts['adjust_right'] = float(sys.argv[argi])
+        elif sys.argv[argi] == "-adjbottom":
+            argi += 1
+            if argi >= argc:
+                usage()
+            opts["adjust_bottom"] = float(sys.argv[argi])
+        elif sys.argv[argi] == "-adjtop":
+            argi += 1
+            if argi >= argc:
+                usage()
+            opts["adjust_top"] = float(sys.argv[argi])
+        elif sys.argv[argi] == "-adjleft":
+            argi += 1
+            if argi >= argc:
+                usage()
+            opts["adjust_left"] = float(sys.argv[argi])
+        elif sys.argv[argi] == "-adjright":
+            argi += 1
+            if argi >= argc:
+                usage()
+            opts["adjust_right"] = float(sys.argv[argi])
 
-		elif sys.argv[argi] == "-c":
-			opts['split_on_comma'] = True
-		elif sys.argv[argi] == "-nc":
-			opts['split_on_comma'] = False
+        elif sys.argv[argi] == "-c":
+            opts["split_on_comma"] = True
+        elif sys.argv[argi] == "-nc":
+            opts["split_on_comma"] = False
 
-		elif sys.argv[argi] == "-n":
-			opts['x_is_line_number'] = True
-		elif sys.argv[argi] == "-t":
-			opts['x_is_time'] = True
-		elif sys.argv[argi] == "-l":
-			opts['draw_points    '] = 0
-			opts['draw_connectors'] = 1
-		elif sys.argv[argi] == "-p":
-			opts['draw_points    '] = 1
-			opts['draw_connectors'] = 0
-		elif sys.argv[argi] == "-lp":
-			opts['draw_points    '] = 1
-			opts['draw_connectors'] = 1
-		elif sys.argv[argi] == "-steps":
-			opts['do_steps'] = 1
-		elif sys.argv[argi] == "-nosteps":
-			opts['do_steps'] = 0
-		elif sys.argv[argi] == "-lines":
-			opts['do_lines'] = True
-		elif sys.argv[argi] == "-ms":
-			argi += 1
-			if argi >= argc:
-				usage()
-			opts['marker_size'] = int(sys.argv[argi])
-		elif sys.argv[argi] == "-lws":
-			argi += 1
-			if argi >= argc:
-				usage()
-			opts['line_widths_string'] = sys.argv[argi]
+        elif sys.argv[argi] == "-n":
+            opts["x_is_line_number"] = True
+        elif sys.argv[argi] == "-t":
+            opts["x_is_time"] = True
+        elif sys.argv[argi] == "-l":
+            opts["draw_points    "] = 0
+            opts["draw_connectors"] = 1
+        elif sys.argv[argi] == "-p":
+            opts["draw_points    "] = 1
+            opts["draw_connectors"] = 0
+        elif sys.argv[argi] == "-lp":
+            opts["draw_points    "] = 1
+            opts["draw_connectors"] = 1
+        elif sys.argv[argi] == "-steps":
+            opts["do_steps"] = 1
+        elif sys.argv[argi] == "-nosteps":
+            opts["do_steps"] = 0
+        elif sys.argv[argi] == "-lines":
+            opts["do_lines"] = True
+        elif sys.argv[argi] == "-ms":
+            argi += 1
+            if argi >= argc:
+                usage()
+            opts["marker_size"] = int(sys.argv[argi])
+        elif sys.argv[argi] == "-lws":
+            argi += 1
+            if argi >= argc:
+                usage()
+            opts["line_widths_string"] = sys.argv[argi]
 
-		elif sys.argv[argi] == "-legend":
-			argi += 1
-			if argi >= argc:
-				usage()
-			opts['arg_legend_labels'] = sys.argv[argi]
+        elif sys.argv[argi] == "-legend":
+            argi += 1
+            if argi >= argc:
+                usage()
+            opts["arg_legend_labels"] = sys.argv[argi]
 
-		elif sys.argv[argi] == "-lop":
-			opts['legend_outside_plot'] = True
-		elif sys.argv[argi] == "-lip":
-			opts['legend_outside_plot'] = False
+        elif sys.argv[argi] == "-lop":
+            opts["legend_outside_plot"] = True
+        elif sys.argv[argi] == "-lip":
+            opts["legend_outside_plot"] = False
 
-		elif sys.argv[argi] == "-labels":
-			argi += 1
-			if argi >= argc:
-				usage()
-			opts['arg_legend_labels'] = sys.argv[argi]
-		elif sys.argv[argi] == "-formats":
-			argi += 1
-			if argi >= argc:
-				usage()
-			opts['arg_formats'] = sys.argv[argi]
-		elif sys.argv[argi] == "-colors":
-			argi += 1
-			if argi >= argc:
-				usage()
-			opts['arg_colors'] = sys.argv[argi]
-		elif sys.argv[argi] == "-grey":
-			opts['do_colors_grey'] =  1
-		elif sys.argv[argi] == "-greyup":
-			opts['do_colors_grey'] =  1
-		elif sys.argv[argi] == "-greydown":
-			opts['do_colors_grey'] = -1
+        elif sys.argv[argi] == "-labels":
+            argi += 1
+            if argi >= argc:
+                usage()
+            opts["arg_legend_labels"] = sys.argv[argi]
+        elif sys.argv[argi] == "-formats":
+            argi += 1
+            if argi >= argc:
+                usage()
+            opts["arg_formats"] = sys.argv[argi]
+        elif sys.argv[argi] == "-colors":
+            argi += 1
+            if argi >= argc:
+                usage()
+            opts["arg_colors"] = sys.argv[argi]
+        elif sys.argv[argi] == "-grey":
+            opts["do_colors_grey"] = 1
+        elif sys.argv[argi] == "-greyup":
+            opts["do_colors_grey"] = 1
+        elif sys.argv[argi] == "-greydown":
+            opts["do_colors_grey"] = -1
 
-		elif sys.argv[argi] == "-xyxy":
-			opts['multiple_x_columns'] = 1
+        elif sys.argv[argi] == "-xyxy":
+            opts["multiple_x_columns"] = 1
 
-		elif sys.argv[argi] == "-eb":
-			opts['do_errorbar'] = True
-		elif sys.argv[argi] == "-errorbar":
-			opts['do_errorbar'] = True
-		elif sys.argv[argi] == "-verrorbar":
-			opts['do_errorbar'] = True
-			opts['eb_is_var'] = True
-		elif sys.argv[argi] == "-bar":
-			opts['do_bar'] = True
-		elif sys.argv[argi] == "-barwidth":
-			argi += 1
-			if argi >= argc:
-				usage()
-			opts['bar_width'] = float(sys.argv[argi])
-			opts['bar_width_given'] = 1
+        elif sys.argv[argi] == "-eb":
+            opts["do_errorbar"] = True
+        elif sys.argv[argi] == "-errorbar":
+            opts["do_errorbar"] = True
+        elif sys.argv[argi] == "-verrorbar":
+            opts["do_errorbar"] = True
+            opts["eb_is_var"] = True
+        elif sys.argv[argi] == "-bar":
+            opts["do_bar"] = True
+        elif sys.argv[argi] == "-barwidth":
+            argi += 1
+            if argi >= argc:
+                usage()
+            opts["bar_width"] = float(sys.argv[argi])
+            opts["bar_width_given"] = 1
 
-		elif sys.argv[argi] == "-lct":
-			opts['first_column_on_top'] = False
-		elif sys.argv[argi] == "-fct":
-			opts['first_column_on_top'] = True
-		elif sys.argv[argi] == "-grid":
-			opts['do_grid'] = 1
+        elif sys.argv[argi] == "-lct":
+            opts["first_column_on_top"] = False
+        elif sys.argv[argi] == "-fct":
+            opts["first_column_on_top"] = True
+        elif sys.argv[argi] == "-grid":
+            opts["do_grid"] = 1
 
-		elif sys.argv[argi] == "-xshift":
-			argi += 1
-			if argi >= argc:
-				usage()
-			opts['xshift'] = float(sys.argv[argi])
-		elif sys.argv[argi] == "-xmul":
-			argi += 1
-			if argi >= argc:
-				usage()
-			opts['xmul'] = float(sys.argv[argi])
-		elif sys.argv[argi] == "-1ox":
-			opts['do_one_over_x'] = 1
-		elif sys.argv[argi] == "-1my":
-			opts['do_one_minus_y'] = 1
-		elif sys.argv[argi] == "-colscale":
-			argi += 1
-			if argi >= argc:
-				usage()
-			opts['column_scales_string'] = sys.argv[argi]
+        elif sys.argv[argi] == "-xshift":
+            argi += 1
+            if argi >= argc:
+                usage()
+            opts["xshift"] = float(sys.argv[argi])
+        elif sys.argv[argi] == "-xmul":
+            argi += 1
+            if argi >= argc:
+                usage()
+            opts["xmul"] = float(sys.argv[argi])
+        elif sys.argv[argi] == "-1ox":
+            opts["do_one_over_x"] = 1
+        elif sys.argv[argi] == "-1my":
+            opts["do_one_minus_y"] = 1
+        elif sys.argv[argi] == "-colscale":
+            argi += 1
+            if argi >= argc:
+                usage()
+            opts["column_scales_string"] = sys.argv[argi]
 
-		elif sys.argv[argi] == "-logx":
-			opts['do_logx'] = 1
-		elif sys.argv[argi] == "-logy":
-			opts['do_logy'] = 1
-		elif sys.argv[argi] == "-loglog":
-			opts['do_logx'] = 1
-			opts['do_logy'] = 1
+        elif sys.argv[argi] == "-logx":
+            opts["do_logx"] = 1
+        elif sys.argv[argi] == "-logy":
+            opts["do_logy"] = 1
+        elif sys.argv[argi] == "-loglog":
+            opts["do_logx"] = 1
+            opts["do_logy"] = 1
 
-		elif sys.argv[argi] == "-lbest": opts['legend_loc'] = 'best'
-		elif sys.argv[argi] == "-lur"  : opts['legend_loc'] = 'upper right'
-		elif sys.argv[argi] == "-lul"  : opts['legend_loc'] = 'upper left'
-		elif sys.argv[argi] == "-lll"  : opts['legend_loc'] = 'lower left'
-		elif sys.argv[argi] == "-llr"  : opts['legend_loc'] = 'lower right'
-		elif sys.argv[argi] == "-lr"   : opts['legend_loc'] = 'right'
-		elif sys.argv[argi] == "-lcl"  : opts['legend_loc'] = 'center left'
-		elif sys.argv[argi] == "-lcr"  : opts['legend_loc'] = 'center right'
-		elif sys.argv[argi] == "-llc"  : opts['legend_loc'] = 'lower center'
-		elif sys.argv[argi] == "-luc"  : opts['legend_loc'] = 'upper center'
-		elif sys.argv[argi] == "-lc"   : opts['legend_loc'] = 'center'
+        elif sys.argv[argi] == "-lbest":
+            opts["legend_loc"] = "best"
+        elif sys.argv[argi] == "-lur":
+            opts["legend_loc"] = "upper right"
+        elif sys.argv[argi] == "-lul":
+            opts["legend_loc"] = "upper left"
+        elif sys.argv[argi] == "-lll":
+            opts["legend_loc"] = "lower left"
+        elif sys.argv[argi] == "-llr":
+            opts["legend_loc"] = "lower right"
+        elif sys.argv[argi] == "-lr":
+            opts["legend_loc"] = "right"
+        elif sys.argv[argi] == "-lcl":
+            opts["legend_loc"] = "center left"
+        elif sys.argv[argi] == "-lcr":
+            opts["legend_loc"] = "center right"
+        elif sys.argv[argi] == "-llc":
+            opts["legend_loc"] = "lower center"
+        elif sys.argv[argi] == "-luc":
+            opts["legend_loc"] = "upper center"
+        elif sys.argv[argi] == "-lc":
+            opts["legend_loc"] = "center"
 
-		elif sys.argv[argi] == "-xmin":
-			argi += 1
-			if argi >= argc:
-				usage()
-			opts['have_x_min'] = 1
-			opts['x_min'] = float(sys.argv[argi])
+        elif sys.argv[argi] == "-xmin":
+            argi += 1
+            if argi >= argc:
+                usage()
+            opts["have_x_min"] = 1
+            opts["x_min"] = float(sys.argv[argi])
 
-		elif sys.argv[argi] == "-xmax":
-			argi += 1
-			if argi >= argc:
-				usage()
-			opts['have_x_max'] = 1
-			opts['x_max'] = float(sys.argv[argi])
+        elif sys.argv[argi] == "-xmax":
+            argi += 1
+            if argi >= argc:
+                usage()
+            opts["have_x_max"] = 1
+            opts["x_max"] = float(sys.argv[argi])
 
-		elif sys.argv[argi] == "-ymin":
-			argi += 1
-			if argi >= argc:
-				usage()
-			opts['have_y_min'] = 1
-			opts['y_min'] = float(sys.argv[argi])
+        elif sys.argv[argi] == "-ymin":
+            argi += 1
+            if argi >= argc:
+                usage()
+            opts["have_y_min"] = 1
+            opts["y_min"] = float(sys.argv[argi])
 
-		elif sys.argv[argi] == "-ymax":
-			argi += 1
-			if argi >= argc:
-				usage()
-			opts['have_y_max'] = 1
-			opts['y_max'] = float(sys.argv[argi])
+        elif sys.argv[argi] == "-ymax":
+            argi += 1
+            if argi >= argc:
+                usage()
+            opts["have_y_max"] = 1
+            opts["y_max"] = float(sys.argv[argi])
 
-		elif sys.argv[argi] == "-o":
-			argi += 1
-			if argi >= argc:
-				usage()
-			opts['output_file'] = sys.argv[argi]
-		elif sys.argv[argi] == "-dpi":
-			argi += 1
-			if argi >= argc:
-				usage()
-			opts['dpi'] = int(sys.argv[argi])
-		else:
-			print >> sys.stderr, "Unrecognized option \"%s\"." \
-				% (sys.argv[argi])
-			usage()
-		argi += 1
+        elif sys.argv[argi] == "-o":
+            argi += 1
+            if argi >= argc:
+                usage()
+            opts["output_file"] = sys.argv[argi]
+        elif sys.argv[argi] == "-dpi":
+            argi += 1
+            if argi >= argc:
+                usage()
+            opts["dpi"] = int(sys.argv[argi])
+        else:
+            sys.stderr.write('Unrecognized option "%s".' % (sys.argv[argi]))
+            usage()
+        argi += 1
 
-	# There must be either zero or one remaining argument:  the file name to
-	# use as input.  (A to-do item is to take input from multiple files.)
+    # There must be either zero or one remaining argument:  the file name to
+    # use as input.  (A to-do item is to take input from multiple files.)
 
-	# No remaining arguments:  input is from stdin.
-	if (argc - argi) == 0:
-		opts['file_name'] = "-"
-	# One remaing argument:  input is from that file.
-	elif (argc - argi) == 1:
-		opts['file_name'] = sys.argv[argi]
-	else:
-		usage()
+    # No remaining arguments:  input is from stdin.
+    if (argc - argi) == 0:
+        opts["file_name"] = "-"
+    # One remaing argument:  input is from that file.
+    elif (argc - argi) == 1:
+        opts["file_name"] = sys.argv[argi]
+    else:
+        usage()
 
-	# Use the file name as the title, as long as the user hasn't requested
-	# something else.
-	if opts['title'] == '':
-		if opts['file_name'] != "-":
-			opts['title'] = opts['file_name']
+    # Use the file name as the title, as long as the user hasn't requested
+    # something else.
+    if opts["title"] == "":
+        if opts["file_name"] != "-":
+            opts["title"] = opts["file_name"]
 
-	# If the user didn't specify legend location, pick the default.
-	# For legend-inside-plot (pylab.legend()) there's a 'best'.
-	# For legend-outside-plot (pylab.figlegend()) there isn't.
-	if opts['legend_loc'] == 'tbd':
-		if opts['legend_outside_plot']:
-			opts['legend_loc'] = 'upper right'
-		else:
-			opts['legend_loc'] = 'best'
+    # If the user didn't specify legend location, pick the default.
+    # For legend-inside-plot (pylab.legend()) there's a 'best'.
+    # For legend-outside-plot (pylab.figlegend()) there isn't.
+    if opts["legend_loc"] == "tbd":
+        if opts["legend_outside_plot"]:
+            opts["legend_loc"] = "upper right"
+        else:
+            opts["legend_loc"] = "best"
 
-	if opts['split_on_comma']:
-		opts['line_widths'] = map(int, opts['line_widths_string'].split(','))
-		opts['column_scales'] = opts['column_scales_string'].split(',')
-	else:
-		opts['line_widths'] = map(int, opts['line_widths_string'].split())
-		opts['column_scales'] = opts['column_scales_string'].split()
+    if opts["split_on_comma"]:
+        opts["line_widths"] = [int(e) for e in opts["line_widths_string"].split(",")]
+        opts["column_scales"] = opts["column_scales_string"].split(",")
+    else:
+        opts["line_widths"] = [int(e) for e in opts["line_widths_string"].split()]
+        opts["column_scales"] = opts["column_scales_string"].split()
+
 
 # ----------------------------------------------------------------
 def read_input_file(opts):
-	legend_labels = []
-	if opts['use_file_labels']:
-		all_labels = tabutil_m.labels_from_file(opts['file_name'], opts['split_on_comma'])
-		if opts['x_is_line_number']:
-			legend_labels = all_labels
-		elif opts['multiple_x_columns']:
-			print >> sys.stderr, "Sorry, I haven't written -flabels for -xyxy yet."
-			sys.exit(1)
-		else:
-			opts['xlabel'] = all_labels[0] # xxx fix me for -n or -xyxy.
-			legend_labels = all_labels[1:]
+    legend_labels = []
+    if opts["use_file_labels"]:
+        all_labels = labels_from_file(opts["file_name"], opts["split_on_comma"])
+        if opts["x_is_line_number"]:
+            legend_labels = all_labels
+        elif opts["multiple_x_columns"]:
+            sys.stder.write("Sorry, I haven't written -flabels for -xyxy yet.")
+            sys.exit(1)
+        else:
+            opts["xlabel"] = all_labels[0]  # xxx fix me for -n or -xyxy.
+            legend_labels = all_labels[1:]
 
-	if opts['x_is_time']:
-		if opts['x_is_line_number']:
-			print >> sys.stderr, "Sorry, -n and -t don't make sense together."
-			sys.exit(1)
-		# Note:  For pylab plots, we convert the time to float where we
-		# read the input data (right here), and we also need to tell it
-		# at plot time that those floats really mean dates.
-		if opts['multiple_x_columns']: # With -xyxy: even columns are time
-			file_columns = tabutil_m.float_or_time_columns_from_file(opts['file_name'], 'xyxy', opts['split_on_comma'])
-		else: # Without -xyxy: column 0 is time
-			file_columns = tabutil_m.float_or_time_columns_from_file(opts['file_name'], 'col0', opts['split_on_comma'])
-	else:
-		file_columns = tabutil_m.float_columns_from_file(opts['file_name'], opts['split_on_comma'])
+    if opts["x_is_time"]:
+        if opts["x_is_line_number"]:
+            sys.stderr.write("Sorry, -n and -t don't make sense together.")
+            sys.exit(1)
+        # Note:  For pylab plots, we convert the time to float where we
+        # read the input data (right here), and we also need to tell it
+        # at plot time that those floats really mean dates.
+        if opts["multiple_x_columns"]:  # With -xyxy: even columns are time
+            file_columns = float_or_time_columns_from_file(
+                opts["file_name"], "xyxy", opts["split_on_comma"]
+            )
+        else:  # Without -xyxy: column 0 is time
+            file_columns = float_or_time_columns_from_file(
+                opts["file_name"], "col0", opts["split_on_comma"]
+            )
+    else:
+        file_columns = float_columns_from_file(
+            opts["file_name"], opts["split_on_comma"]
+        )
 
-	return (file_columns, legend_labels)
+    return (file_columns, legend_labels)
+
 
 # ----------------------------------------------------------------
 def trim_missing_points2(xs, ys):
-	n = len(xs)
-	trim_xs = []
-	trim_ys = []
-	for i in range(0, n):
-		if ys[i] != None:
-			trim_xs.append(xs[i])
-			trim_ys.append(ys[i])
-	return [trim_xs, trim_ys]
+    n = len(xs)
+    trim_xs = []
+    trim_ys = []
+    for i in range(0, n):
+        if ys[i] is not None:
+            trim_xs.append(xs[i])
+            trim_ys.append(ys[i])
+    return [trim_xs, trim_ys]
+
 
 # ----------------------------------------------------------------
 def trim_missing_points3(xs, ys, es):
-	n = len(xs)
-	trim_xs = []
-	trim_ys = []
-	trim_es = []
-	for i in range(0, n):
-		if ys[i] != None and es[i] != None:
-			trim_xs.append(xs[i])
-			trim_ys.append(ys[i])
-			trim_es.append(es[i])
-	return [trim_xs, trim_ys, trim_es]
+    n = len(xs)
+    trim_xs = []
+    trim_ys = []
+    trim_es = []
+    for i in range(0, n):
+        if ys[i] is not None and es[i] is not None:
+            trim_xs.append(xs[i])
+            trim_ys.append(ys[i])
+            trim_es.append(es[i])
+    return [trim_xs, trim_ys, trim_es]
+
 
 # ----------------------------------------------------------------
-def plot_series(x_series, y_series, e_series, num_series, formats, legend_labels, colors, opts):
+def plot_series(
+    x_series, y_series, e_series, num_series, formats, legend_labels, colors, opts
+):
 
-	if num_series < 1:
-		print >> sys.stderr, \
-			"plot_series:  at least one series is required; got %d." \
-			% (num_series)
-		sys.exit(1)
+    if num_series < 1:
+        sys.stderr.write(
+            "plot_series:  at least one series is required; got %d." % (num_series)
+        )
+        sys.exit(1)
 
-	num_x_series = len(x_series)
-	num_y_series = len(y_series)
-	num_e_series = len(e_series)
+    num_x_series = len(x_series)
+    num_y_series = len(y_series)
+    num_e_series = len(e_series)
 
-	series_order = range(0, num_series)
-	if opts['first_column_on_top']:
-		series_order.reverse()
+    series_order = range(0, num_series)
+    if opts["first_column_on_top"]:
+        series_order.reverse()
 
-	# Create a blank figure object on which to plot.
-	fig = pylab.figure(1, figsize=(opts['width_inches'], opts['height_inches']))
-	# The issue is that axis labels show up fine, with default window sizing --
-	# but if I make the window less tall, the x label gets clipped off.
-	fig.subplots_adjust(bottom=opts['adjust_bottom'])
-	fig.subplots_adjust(top=opts['adjust_top'])
-	fig.subplots_adjust(left=opts['adjust_left'])
-	fig.subplots_adjust(right=opts['adjust_right'])
+    # Create a blank figure object on which to plot.
+    fig = pylab.figure(1, figsize=(opts["width_inches"], opts["height_inches"]))
+    # The issue is that axis labels show up fine, with default window sizing --
+    # but if I make the window less tall, the x label gets clipped off.
+    fig.subplots_adjust(bottom=opts["adjust_bottom"])
+    fig.subplots_adjust(top=opts["adjust_top"])
+    fig.subplots_adjust(left=opts["adjust_left"])
+    fig.subplots_adjust(right=opts["adjust_right"])
 
-	# Take bar-plot bar width to be x spacing, unless the user requested
-	# something else.  (pylab.errorbar default is spacing 0.8.)
-	if opts['do_bar']:
-		if not opts['bar_width_given']:
-			opts['bar_width'] = x_series[0][1] - x_series[0][0]
+    # Take bar-plot bar width to be x spacing, unless the user requested
+    # something else.  (pylab.errorbar default is spacing 0.8.)
+    if opts["do_bar"]:
+        if not opts["bar_width_given"]:
+            opts["bar_width"] = x_series[0][1] - x_series[0][0]
 
-	plot_lines_for_figlegend = []
+    plot_lines_for_figlegend = []
 
-	# Error-bar plot.
-	if opts['do_errorbar']:
-		for j in series_order:
+    # Error-bar plot.
+    if opts["do_errorbar"]:
+        for j in series_order:
 
-			[curr_x_series, curr_y_series, curr_e_series] = \
-				trim_missing_points3(
-				x_series[j % num_x_series],
-				y_series[j % num_y_series],
-				e_series[j % num_e_series])
+            [curr_x_series, curr_y_series, curr_e_series] = trim_missing_points3(
+                x_series[j % num_x_series],
+                y_series[j % num_y_series],
+                e_series[j % num_e_series],
+            )
 
-			if len(curr_x_series) > 0:
-				if colors == []:
-					plot_line, = pylab.errorbar(
-						curr_x_series, \
-						curr_y_series, \
-						curr_e_series, \
-						fmt=formats[j], \
-						label=legend_labels[j], \
-						markersize=opts['marker_size'],
-						linewidth=opts['line_widths'][j % len(opts['line_widths'])])
-				else:
-					plot_line, = pylab.errorbar(
-						curr_x_series, \
-						curr_y_series, \
-						curr_e_series, \
-						ecolor=colors[j % len(colors)], \
-						color=colors[j % len(colors)], \
-						fmt=formats[j], \
-						label=legend_labels[j], \
-						markersize=opts['marker_size'],
-						linewidth=opts['line_widths'][j % len(opts['line_widths'])])
+            if len(curr_x_series) > 0:
+                if colors == []:
+                    (plot_line,) = pylab.errorbar(
+                        curr_x_series,
+                        curr_y_series,
+                        curr_e_series,
+                        fmt=formats[j],
+                        label=legend_labels[j],
+                        markersize=opts["marker_size"],
+                        linewidth=opts["line_widths"][j % len(opts["line_widths"])],
+                    )
+                else:
+                    (plot_line,) = pylab.errorbar(
+                        curr_x_series,
+                        curr_y_series,
+                        curr_e_series,
+                        ecolor=colors[j % len(colors)],
+                        color=colors[j % len(colors)],
+                        fmt=formats[j],
+                        label=legend_labels[j],
+                        markersize=opts["marker_size"],
+                        linewidth=opts["line_widths"][j % len(opts["line_widths"])],
+                    )
 
-			plot_lines_for_figlegend.append(plot_line)
+            plot_lines_for_figlegend.append(plot_line)
 
-	# Non-error-bar plot.
-	else:
-		for j in series_order:
-			curr_x_series = x_series     [j % num_x_series]
-			curr_y_series = y_series     [j % num_y_series]
-			curr_format   = formats      [j % len(formats)]
-			curr_legend_label = legend_labels[j % len(legend_labels)]
-			curr_line_width = opts['line_widths'][j % len(opts['line_widths'])]
+    # Non-error-bar plot.
+    else:
+        for j in series_order:
+            curr_x_series = x_series[j % num_x_series]
+            curr_y_series = y_series[j % num_y_series]
+            curr_format = formats[j % len(formats)]
+            curr_legend_label = legend_labels[j % len(legend_labels)]
+            curr_line_width = opts["line_widths"][j % len(opts["line_widths"])]
 
-			[curr_x_series, curr_y_series] = trim_missing_points2( \
-				curr_x_series, curr_y_series)
+            [curr_x_series, curr_y_series] = trim_missing_points2(
+                curr_x_series, curr_y_series
+            )
 
-			# Bar-chart plot.
-			if opts['do_bar']:
-				if len(colors) > 0:
-					plot_line, = pylab.bar(curr_x_series, curr_y_series, width=opts['bar_width'], \
-						linewidth=curr_line_width, \
-						color=colors[j % len(colors)])
-				else:
-					plot_line, = pylab.bar(curr_x_series, curr_y_series, width=opts['bar_width'], \
-						linewidth=curr_line_width)
+            # Bar-chart plot.
+            if opts["do_bar"]:
+                if len(colors) > 0:
+                    (plot_line,) = pylab.bar(
+                        curr_x_series,
+                        curr_y_series,
+                        width=opts["bar_width"],
+                        linewidth=curr_line_width,
+                        color=colors[j % len(colors)],
+                    )
+                else:
+                    (plot_line,) = pylab.bar(
+                        curr_x_series,
+                        curr_y_series,
+                        width=opts["bar_width"],
+                        linewidth=curr_line_width,
+                    )
 
-			# Regular XY plot.
-			else:
-				if colors == []:
+            # Regular XY plot.
+            else:
+                if colors == []:
 
-					if opts['do_logx'] and not opts['do_logy']:
-						plot_func = pylab.semilogx
-					elif opts['do_logy'] and not opts['do_logx']:
-						plot_func = pylab.semilogy
-					elif opts['do_logx'] and opts['do_logy']:
-						plot_func = pylab.loglog
-					elif opts['x_is_time']:
-						plot_func = pylab.plot_date
-					else:
-						plot_func = pylab.plot
+                    if opts["do_logx"] and not opts["do_logy"]:
+                        plot_func = pylab.semilogx
+                    elif opts["do_logy"] and not opts["do_logx"]:
+                        plot_func = pylab.semilogy
+                    elif opts["do_logx"] and opts["do_logy"]:
+                        plot_func = pylab.loglog
+                    elif opts["x_is_time"]:
+                        plot_func = pylab.plot_date
+                    else:
+                        plot_func = pylab.plot
 
-					if opts['do_steps']:
-						plot_line, = plot_func(curr_x_series, curr_y_series,
-								curr_format, label=curr_legend_label,
-								markeredgewidth=0, markersize=opts['marker_size'],
-								linewidth=curr_line_width,
-								drawstyle='steps')
-					else:
-						plot_line, = plot_func(curr_x_series, curr_y_series,
-								curr_format, label=curr_legend_label,
-								markeredgewidth=0, markersize=opts['marker_size'],
-								linewidth=curr_line_width)
+                    if opts["do_steps"]:
+                        (plot_line,) = plot_func(
+                            curr_x_series,
+                            curr_y_series,
+                            curr_format,
+                            label=curr_legend_label,
+                            markeredgewidth=0,
+                            markersize=opts["marker_size"],
+                            linewidth=curr_line_width,
+                            drawstyle="steps",
+                        )
+                    else:
+                        (plot_line,) = plot_func(
+                            curr_x_series,
+                            curr_y_series,
+                            curr_format,
+                            label=curr_legend_label,
+                            markeredgewidth=0,
+                            markersize=opts["marker_size"],
+                            linewidth=curr_line_width,
+                        )
 
-				else:
-					curr_color = colors[j % len(colors)]
+                else:
+                    curr_color = colors[j % len(colors)]
 
-					if opts['do_logx'] and not opts['do_logy']:
-						plot_func = pylab.semilogx
-					elif opts['do_logy'] and not opts['do_logx']:
-						plot_func = pylab.semilogy
-					elif opts['do_logx'] and opts['do_logy']:
-						plot_func = pylab.loglog
-					elif opts['x_is_time']:
-						plot_func = pylab.plot_date
-					else:
-						plot_func = pylab.plot
+                    if opts["do_logx"] and not opts["do_logy"]:
+                        plot_func = pylab.semilogx
+                    elif opts["do_logy"] and not opts["do_logx"]:
+                        plot_func = pylab.semilogy
+                    elif opts["do_logx"] and opts["do_logy"]:
+                        plot_func = pylab.loglog
+                    elif opts["x_is_time"]:
+                        plot_func = pylab.plot_date
+                    else:
+                        plot_func = pylab.plot
 
-					if opts['do_steps']:
-						plot_line, = plot_func(curr_x_series, curr_y_series,
-							curr_format, label=curr_legend_label, color=curr_color,
-							markerfacecolor=curr_color, markeredgecolor=curr_color,
-							markersize=opts['marker_size'],
-							linewidth=curr_line_width,
-							drawstyle='steps')
-					else:
-						plot_line, = plot_func(curr_x_series, curr_y_series,
-							curr_format, label=curr_legend_label, color=curr_color,
-							markerfacecolor=curr_color, markeredgecolor=curr_color,
-							markersize=opts['marker_size'],
-							linewidth=curr_line_width)
+                    if opts["do_steps"]:
+                        (plot_line,) = plot_func(
+                            curr_x_series,
+                            curr_y_series,
+                            curr_format,
+                            label=curr_legend_label,
+                            color=curr_color,
+                            markerfacecolor=curr_color,
+                            markeredgecolor=curr_color,
+                            markersize=opts["marker_size"],
+                            linewidth=curr_line_width,
+                            drawstyle="steps",
+                        )
+                    else:
+                        (plot_line,) = plot_func(
+                            curr_x_series,
+                            curr_y_series,
+                            curr_format,
+                            label=curr_legend_label,
+                            color=curr_color,
+                            markerfacecolor=curr_color,
+                            markeredgecolor=curr_color,
+                            markersize=opts["marker_size"],
+                            linewidth=curr_line_width,
+                        )
 
-			plot_lines_for_figlegend.append(plot_line)
+            plot_lines_for_figlegend.append(plot_line)
 
-	# Axis labels and title.
-	pylab.xlabel(opts['xlabel'])
-	pylab.ylabel(opts['ylabel'])
-	pylab.title(opts['title'])
+    # Axis labels and title.
+    pylab.xlabel(opts["xlabel"])
+    pylab.ylabel(opts["ylabel"])
+    pylab.title(opts["title"])
 
-	# Put four decimal places in mouseovers.
-	ax = pylab.axes()
-	ax.fmt_xdata = lambda x: '%.4f'%x
-	ax.fmt_ydata = lambda y: '%.4f'%y
+    # b04k3n in python3
+    # # Put four decimal places in mouseovers.
+    # ax = pylab.axes()
+    # ax.fmt_xdata = lambda x: "%.4f" % x
+    # ax.fmt_ydata = lambda y: "%.4f" % y
 
-	# Set min/max values for axes.  By default, pylab uses the X & Y data
-	# min & max.
-	if opts['have_x_min']:
-		[           old_x_min, old_x_max, old_y_min, old_y_max] = pylab.axis()
-		pylab.axis([opts['x_min'], old_x_max, old_y_min, old_y_max])
+    # Set min/max values for axes.  By default, pylab uses the X & Y data
+    # min & max.
+    if opts["have_x_min"]:
+        [old_x_min, old_x_max, old_y_min, old_y_max] = pylab.axis()
+        pylab.axis([opts["x_min"], old_x_max, old_y_min, old_y_max])
 
-	if opts['have_x_max']:
-		[           old_x_min, old_x_max, old_y_min, old_y_max] = pylab.axis()
-		pylab.axis([old_x_min, opts['x_max'], old_y_min, old_y_max])
+    if opts["have_x_max"]:
+        [old_x_min, old_x_max, old_y_min, old_y_max] = pylab.axis()
+        pylab.axis([old_x_min, opts["x_max"], old_y_min, old_y_max])
 
-	if opts['have_y_min']:
-		[           old_x_min, old_x_max, old_y_min, old_y_max] = pylab.axis()
-		pylab.axis([old_x_min, old_x_max, opts['y_min'], old_y_max])
+    if opts["have_y_min"]:
+        [old_x_min, old_x_max, old_y_min, old_y_max] = pylab.axis()
+        pylab.axis([old_x_min, old_x_max, opts["y_min"], old_y_max])
 
-	if opts['have_y_max']:
-		[           old_x_min, old_x_max, old_y_min, old_y_max] = pylab.axis()
-		pylab.axis([old_x_min, old_x_max, old_y_min, opts['y_max']])
+    if opts["have_y_max"]:
+        [old_x_min, old_x_max, old_y_min, old_y_max] = pylab.axis()
+        pylab.axis([old_x_min, old_x_max, old_y_min, opts["y_max"]])
 
-	if opts['x_is_time']:
-		# Write dates on the x axis vertically to avoid overlap
-		fig.autofmt_xdate(bottom=opts['adjust_bottom'], rotation=90)
-		#ax.xaxis.set_major_formatter(matplotlib.dates.DateFormatter('%Y%m%d-%H:%M:%S'))
-		ax.xaxis.set_major_formatter(matplotlib.dates.DateFormatter('%Y%m%d\n%H:%M:%S'))
+    if opts["x_is_time"]:
+        # Write dates on the x axis vertically to avoid overlap
+        fig.autofmt_xdate(bottom=opts["adjust_bottom"], rotation=90)
+        # ax.xaxis.set_major_formatter(matplotlib.dates.DateFormatter('%Y%m%d-%H:%M:%S'))
+        ax.xaxis.set_major_formatter(matplotlib.dates.DateFormatter("%Y%m%d\n%H:%M:%S"))
 
-	# Show the grid, if it was requested.
-	if opts['do_grid']:
-		pylab.grid(color='grey')
-	# Show the legend, if it was requested.
-	if opts['do_legend']:
-		if opts['legend_outside_plot']:
-			pylab.figlegend(plot_lines_for_figlegend, legend_labels, opts['legend_loc'])
-		else:
-			pylab.legend(loc=opts['legend_loc'])
+    # Show the grid, if it was requested.
+    if opts["do_grid"]:
+        pylab.grid(color="grey")
+    # Show the legend, if it was requested.
+    if opts["do_legend"]:
+        if opts["legend_outside_plot"]:
+            pylab.figlegend(plot_lines_for_figlegend, legend_labels, opts["legend_loc"])
+        else:
+            pylab.legend(loc=opts["legend_loc"])
 
-	if opts['output_file'] == '':
-		# To screen
-		pylab.show()
-	else:
-		# To file (e.g. .eps, .png).  pylab will pick the output-file format
-		# based on output-file-name extension.
-		pylab.savefig(opts['output_file'], dpi=opts['dpi'])
+    if opts["output_file"] == "":
+        # To screen
+        pylab.show()
+    else:
+        # To file (e.g. .eps, .png).  pylab will pick the output-file format
+        # based on output-file-name extension.
+        pylab.savefig(opts["output_file"], dpi=opts["dpi"])
+
 
 # ----------------------------------------------------------------
 # Line plot takes four columns:
@@ -980,51 +1051,861 @@ def plot_series(x_series, y_series, e_series, num_series, formats, legend_labels
 # For each row in the file, we draw a line from (x1, y1) to (x2, y2).
 # This can be used for an (arrowless) vector-field plot, among other things.
 
+
 def plot_lines(data_columns, opts):
 
-	if len(data_columns) != 4:
-		print >> sys.stderr, \
-			"plot_lines_from_file:  expected 4 data columns; got %d.\n" \
-			% (len(data_columns))
-		sys.exit(1)
+    if len(data_columns) != 4:
+        sys.stderr.write(
+            "plot_lines_from_file:  expected 4 data columns; got %d.\n"
+            % (len(data_columns))
+        )
+        sys.exit(1)
 
-	fmt="-"
-	if opts['draw_points']:
-		if opts['draw_connectors']:
-			fmt="bo-"
-		else:
-			fmt="bo"
-	else:
-		if opts['draw_connectors']:
-			fmt="b-"
-		else:
-			# At least one of draw_points and draw_connectors must be
-			# specified.  The command-line parser shouldn't have allowed this.
-			print >> sys.stderr, "plot_series:  coding error."
-			sys.exit(1)
+    fmt = "-"
+    if opts["draw_points"]:
+        if opts["draw_connectors"]:
+            fmt = "bo-"
+        else:
+            fmt = "bo"
+    else:
+        if opts["draw_connectors"]:
+            fmt = "b-"
+        else:
+            # At least one of draw_points and draw_connectors must be
+            # specified.  The command-line parser shouldn't have allowed this.
+            sys.stderr.write("plot_series:  coding error.")
+            sys.exit(1)
 
-	x1s = data_columns[0]
-	y1s = data_columns[1]
-	x2s = data_columns[2]
-	y2s = data_columns[3]
+    x1s = data_columns[0]
+    y1s = data_columns[1]
+    x2s = data_columns[2]
+    y2s = data_columns[3]
 
-	pylab.figure(1, figsize=(opts['width_inches'], opts['height_inches']))
-	num_points = len(x1s)
-	for k in range(0, num_points):
-		x = [x1s[k], x2s[k]]
-		y = [y1s[k], y2s[k]]
-		pylab.plot(x,y, fmt, markeredgewidth=0, markersize=1)
-	pylab.title(opts['title'])
+    pylab.figure(1, figsize=(opts["width_inches"], opts["height_inches"]))
+    num_points = len(x1s)
+    for k in range(0, num_points):
+        x = [x1s[k], x2s[k]]
+        y = [y1s[k], y2s[k]]
+        pylab.plot(x, y, fmt, markeredgewidth=0, markersize=1)
+    pylab.title(opts["title"])
 
-	# Put four decimal places in mouseovers.
-	ax = pylab.axes()
-	ax.fmt_xdata = lambda x: '%.4f'%x
-	ax.fmt_ydata = lambda y: '%.4f'%y
+    # Put four decimal places in mouseovers.
+    ax = pylab.axes()
+    ax.fmt_xdata = lambda x: "%.4f" % x
+    ax.fmt_ydata = lambda y: "%.4f" % y
 
-	if opts['output_file'] == '':
-		pylab.show()
-	else:
-		pylab.savefig(opts['output_file'], dpi=opts['dpi'])
+    if opts["output_file"] == "":
+        pylab.show()
+    else:
+        pylab.savefig(opts["output_file"], dpi=opts["dpi"])
+
+
+# ----------------------------------------------------------------
+def open_file_or_die(file_name, mode):
+    if file_name == "-":
+        if mode == "r":
+            file_handle = sys.stdin
+        else:
+            file_handle = sys.stdout
+    else:
+        try:
+            file_handle = open(file_name, mode)
+        except:
+            sys.stderr.write(
+                'Couldn\'t open file "%s" for mode "%s".' % (file_name, mode)
+            )
+            sys.exit(1)
+    return file_handle
+
+
+# ----------------------------------------------------------------
+def text_columns_from_file(file_name, split_on_comma=False):
+    """Given an input file containing tabular data, returns a list of columns.
+    Pound signs may be used as comments; blank lines are skipped.
+    For example, if the input file is
+
+    1 2 3
+    4 5 6 # Comment here
+
+    7 8 9
+    a b c
+
+    then this routine returns
+    [['1', '4', '7', 'a'], ['2', '5', '8', 'b'], ['3', '6', '9', 'c']].
+    """
+
+    file_handle = open_file_or_die(file_name, "r")
+
+    columns = []
+    num_fields = -1
+    line_number = 0
+
+    while 1:
+        line = file_handle.readline()
+        if line == "":
+            break
+        line_number += 1
+
+        # Skip the header, which for CSV format needn't begin with a #.
+        if split_on_comma and line_number == 1:
+            continue
+
+        # Strip trailing carriage return, if any.
+        if line[-1] == "\n":
+            line = line[0:-1]
+        # Strip comments.
+        line = re.sub(r"#.*", r"", line)
+        # Strip leading and trailing whitespace.
+        line = re.sub(r"^\s+", r"", line)
+        line = re.sub(r"\s+$", r"", line)
+        # Skip blank lines.
+        if re.match(r"^$", line):
+            continue
+
+        # Split on comma or whitespace.
+        if split_on_comma:
+            fields = line.split(",")
+        else:
+            fields = line.split()
+        curr_num_fields = len(fields)
+
+        if num_fields == -1:
+            # First data line of file.
+            num_fields = curr_num_fields
+            for j in range(0, num_fields):
+                columns.append([])
+        elif curr_num_fields != num_fields:
+            sys.stderr.write(
+                'Ragged input in file "%s" at line %d.' % (file_name, line_number)
+            )
+            sys.exit(1)
+        for j in range(0, num_fields):
+            columns[j].append(fields[j])
+
+    if file_name != "-":
+        file_handle.close()
+
+    return columns
+
+
+# ----------------------------------------------------------------
+def float_columns_from_file(file_name, split_on_comma=False):
+    """Given an input file containing float tabular data, returns a list of columns.
+    Pound signs may be used as comments; blank lines are skipped.
+    For example, if the input file is
+
+    1 2 3
+    4 5 6 # Comment here
+
+    7 8 9
+
+    then this routine returns
+    [[1.0, 4.0, 7.0], [2.0, 5.0, 8.0], [3.0, 6.0, 9.0]]
+    """
+
+    columns = text_columns_from_file(file_name, split_on_comma)
+
+    # jrk 2011-03-21: column labels already read ...
+
+    # # Skip the first line, if it looks like it's text (column labels).
+    # try:
+    #     x = double(columns[0][0])
+    # except:
+    #     columns = map(lambda column : column[1:], columns)
+
+    num_rows = len(columns)
+    num_cols = len(columns[0])
+    for i in range(0, num_rows):
+        for j in range(0, num_cols):
+            entry = columns[i][j]
+            if entry == "_":
+                columns[i][j] = None
+            elif entry == "":
+                columns[i][j] = None
+            else:
+                columns[i][j] = float(entry)
+    return columns
+
+
+# ----------------------------------------------------------------
+# Try accept various date formats, e.g.
+#   20090102 14:30:00          20090102 14:30:00 +0000
+#   20090102 14:30:00.000      20090102 14:30:00.000 +0000
+#   20090102-14:30:00          20090102-14:30:00 +0000
+#   20090102-14:30:00.000      20090102-14:30:00.000 +0000
+# See http://docs.python.org/library/time.html for information about
+# format strings.
+
+# pylab dates are (floating-point) number of dates since 1/1 of 1 A.D.
+
+
+def time_string_to_pylab_float_time(string):
+
+    # I don't want this entire module to be dependent on pylab.
+    try:
+        import pylab
+    except:
+        sys.stderr.write("Couldn't import pylab module.")
+        sys.exit(1)
+
+    # strptime can't handle the fractional part.  Split that off.
+    pieces = string.split(".")
+    date_and_time_part = pieces[0]
+    time_struct = date_and_time_part_to_time_struct(date_and_time_part)
+    float_time = pylab.date2num(time_struct)
+
+    # Add in the fractional part.  Also try to handle the timezone part,
+    # if any.
+    if len(pieces) > 1:
+        remaining_pieces = pieces[1].split()
+        if len(remaining_pieces) == 1:
+            pass  # No timezone offset
+        elif len(remaining_pieces) == 2:
+            pass  # Timezone offset; ignore it.
+        else:
+            sys.stderr.write("Extra stuff in time string ", string)
+            sys.exit(1)
+        sec_frac = float("." + remaining_pieces[0])
+        return float_time + sec_frac / 24 / 60 / 60
+    else:
+        return float_time
+
+
+def date_and_time_part_to_time_struct(date_and_time_part):
+    fmts = [
+        "%Y%m%d %H:%M:%S",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y%m%d-%H:%M:%S",
+        "%Y-%m-%d-%H:%M:%S",
+        "%Y%m%d-%H%M%S",
+        "%Y%m%d",
+        "%Y-%m-%d",
+    ]
+    for fmt in fmts:
+        try:
+            time_struct = datetime.datetime.strptime(date_and_time_part, fmt)
+            return time_struct
+        except:
+            pass
+
+    sys.stderr.write('Couldn\'t parse "%s" as date.' % (date_and_time_part))
+    sys.stderr.write("Tried formats:", fmts)
+    sys.exit(1)
+
+
+# ----------------------------------------------------------------
+def float_or_time_columns_from_file(file_name, which_are_time, split_on_comma=False):
+    """Given an input file containing float tabular data, returns a list of columns.
+    Pound signs may be used as comments; blank lines are skipped.
+    For example, if the input file is
+
+    1 2 3
+    4 5 6 # Comment here
+
+    7 8 9
+
+    then this routine returns
+    [[1.0, 4.0, 7.0], [2.0, 5.0, 8.0], [3.0, 6.0, 9.0]]
+    """
+
+    columns = text_columns_from_file(file_name, split_on_comma)
+
+    # Skip the first line, if it looks like it's text (column labels).
+    try:
+        float(columns[0][0])
+    except:
+        columns = [column[1:] for column in columns]
+
+    if which_are_time == "col0":
+        is_time_column_tester = lambda x: x == 0
+    elif which_are_time == "xyxy":
+        is_time_column_tester = lambda x: (x & 1) == 0
+    else:
+        sys.stderr.write(
+            "float_or_time_columns_from_file:  which_are_time argument "
+            + 'must be "col0" or "xyxy"; got "%s".' % (which_are_time)
+        )
+        sys.exit(1)
+
+    num_cols = len(columns)
+    num_rows = len(columns[0])
+    for j in range(0, num_cols):
+        for i in range(0, num_rows):
+            entry = columns[j][i]
+            if entry == "_" or entry == "":
+                columns[j][i] = None
+            elif is_time_column_tester(j):
+                columns[j][i] = time_string_to_pylab_float_time(entry)
+            else:
+                columns[j][i] = float(entry)
+    return columns
+
+
+# ----------------------------------------------------------------
+def xy_columns_from_file(file_name):
+    """Given an input file containing float tabular data, returns a list containing
+    the x column, and a list of y columns.
+    Pound signs may be used as comments; blank lines are skipped.
+    For example, if the input file is
+
+    1 2 3
+    4 5 6 # Comment here
+
+    7 8 9
+
+    then this routine returns
+    [ [1.0, 4.0, 7.0], [[2.0, 5.0, 8.0], [3.0, 6.0, 9.0]] ]
+    """
+
+    columns = float_columns_from_file(file_name)
+    return [columns[0], columns[1:]]
+
+
+# ----------------------------------------------------------------
+def xye_columns_from_file(file_name):
+    """Given an input file containing float tabular data, returns a list containing
+    the x column, a list of y columns, and a list of error-bar columns.
+    Pound signs may be used as comments; blank lines are skipped.
+    For example, if the input file is
+
+    1 2 0.2 3 0.3
+    4 5 0.2 6 0.3 # Comment here
+
+    7 8 0.2 9 0.3
+
+    then this routine returns
+    [
+    [1.0, 4.0, 7.0],
+    [[2.0, 5.0, 8.0], [3.0, 6.0, 9.0]],
+    [[0.2, 0.2, 0.2], [0.3, 0.3, 0.3]]
+    ]
+    """
+
+    columns = float_columns_from_file(file_name)
+    x_columns = columns[0]
+    y_columns = []
+    e_columns = []
+    temp = columns[1:]
+    if (len(temp) % 2) != 0:
+        sys.stderr.write(
+            "xye_columns_from_file:  need odd number of columns in file '%s'."
+            % (file_name)
+        )
+        sys.exit(1)
+    num_columns = int(round(len(temp) / 2))
+    for j in range(0, num_columns):
+        y_columns.append(temp[2 * j])
+        e_columns.append(temp[2 * j + 1])
+
+    return [x_columns, y_columns, e_columns]
+
+
+# ----------------------------------------------------------------
+def xye_columns_to_file(x_column, y_columns, e_columns, file_name, format="%11.7f"):
+
+    all_columns = [x_column]
+    num_series = len(y_columns)
+    for j in range(0, num_series):
+        all_columns.append(y_columns[j])
+        all_columns.append(e_columns[j])
+    float_columns_to_file(all_columns, file_name, format)
+
+
+# ----------------------------------------------------------------
+# Example:  If the data file is
+#
+#   #x y1 y2 y3
+#   #- -- -- --
+#   1  2  3  4
+#   2  4  2  7
+#   3  6  5  9
+#   4  8  1  5
+#
+# then this routine returns
+#
+#   ["x", ["y1", "y2", "y3"]].
+
+
+def labels_from_file(file_name, split_on_comma=False):
+
+    file_handle = open_file_or_die(file_name, "r")
+
+    line = file_handle.readline()
+    if line == "":
+        sys.stderr.write("labels_from_file:  couldn't read line 1.")
+        sys.exit(1)
+
+    if file_name != "-":
+        file_handle.close()
+
+    # Strip leading whitespace
+    line = re.sub(r"^\s+", r"", line)
+
+    # Omit the comment character(s).
+    line = re.sub(r"^#+", r"", line)
+
+    # Strip trailing carriage return, if any.
+    if line[-1] == "\n":
+        line = line[0:-1]
+    # Strip leading and trailing whitespace.
+    line = re.sub(r"^\s+", r"", line)
+    line = re.sub(r"\s+$", r"", line)
+
+    # Split on comma or whitespace.
+    if split_on_comma:
+        labels = line.split(",")
+    else:
+        labels = line.split()
+    return labels
+
+
+# ----------------------------------------------------------------
+# E.g. input file was
+#   1  5
+#   2  7
+#   3  6
+# so columns are
+#   [[1, 2, 3], [5, 7, 6]].
+# Then the tuples are
+#   [[1, 5], [2, 7], [3, 6]].
+
+
+def columns_to_tuples(columns):
+    num_columns = len(columns)
+    num_tuples = len(columns[0])
+    tuples = []
+    for i in range(0, num_tuples):
+        tuple = []
+        for j in range(0, num_columns):
+            tuple.append(columns[j][i])
+        tuples.append(tuple)
+    return tuples
+
+
+# ----------------------------------------------------------------
+def float_rows_from_file(file_name):
+    """Given an input file containing float tabular data, returns a list of rows.
+    Pound signs may be used as comments; blank lines are skipped.
+    For example, if the input file is
+
+    1 2 3
+    4 5 6 # Comment here
+
+    7 8 9
+
+    then this routine returns
+    [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]]
+    """
+
+    return columns_to_tuples(float_columns_from_file(file_name))
+
+
+# ----------------------------------------------------------------
+def float_columns_to_file(columns, file_name, format="%11.7f"):
+    """Given a list of columns, write the data to a table file.
+    For example, if the input is
+
+    [[1.0, 4.0, 7.0], [2.0, 5.0, 8.0], [3.0, 6.0, 9.0]]
+
+    then the output file contains
+
+    1.0000 2.0000 3.0000
+    4.0000 5.0000 6.0000
+    7.0000 8.0000 9.0000
+    """
+
+    num_columns = len(columns)
+    num_rows = len(columns[0])
+    text_columns = []
+    for j in range(0, num_columns):
+        text_column = []
+        for i in range(0, num_rows):
+            entry = columns[j][i]
+            if entry is None:
+                text_column.append("_")
+            else:
+                text_column.append(format % entry)
+        text_columns.append(text_column)
+
+    text_columns_to_file(text_columns, file_name)
+
+
+# ----------------------------------------------------------------
+def float_rows_to_file(rows, file_name, format="%11.7f"):
+    """Given a list of rows, write the data to a table file.
+    For example, if the input is
+
+    [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]]
+
+    then the output file contains
+
+    1.0000 2.0000 3.0000
+    4.0000 5.0000 6.0000
+    7.0000 8.0000 9.0000
+
+    """
+
+    float_rows_and_labels_to_file(rows, None, file_name, format)
+
+
+# ----------------------------------------------------------------
+def float_rows_and_labels_to_file(rows, labels, file_name, format="%11.7f"):
+    """Given a list of rows, write the data to a table file.
+    For example, if the input is
+
+    [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]]
+
+    and the labels are
+
+    ['x', 'y', 'z'],
+
+    then the output file contains
+
+    #x     y      z
+    #-     -      -
+    1.0000 2.0000 3.0000
+    4.0000 5.0000 6.0000
+    7.0000 8.0000 9.0000
+
+    """
+
+    num_rows = len(rows)
+    num_columns = len(rows[0])
+    text_rows = []
+    for i in range(0, num_rows):
+        text_row = []
+        for j in range(0, num_columns):
+            entry = rows[i][j]
+            if entry is None:
+                text_row.append("_")
+            else:
+                text_row.append(format % entry)
+        text_rows.append(text_row)
+
+    text_rows_and_labels_to_file(text_rows, labels, file_name)
+
+
+# ----------------------------------------------------------------
+def print_float_columns(columns, format="%11.7f"):
+    float_columns_to_file(columns, "-", format)
+
+
+# ----------------------------------------------------------------
+def float_columns_and_labels_to_file(columns, labels, file_name, format="%11.7f"):
+    """Given a list of columns, write the data to a table file.
+    For example, if the columns input is
+
+    [[1.0, 4.0, 7.0], [2.0, 5.0, 8.0], [3.0, 6.0, 9.0]]
+
+    and the labels input is
+
+    ['x', 'y1', 'y2'],
+
+    then the output file contains
+
+    #x     y1     y2
+    #-     --     --
+    1.0000 2.0000 3.0000
+    4.0000 5.0000 6.0000
+    7.0000 8.0000 9.0000
+    """
+
+    num_columns = len(columns)
+    num_rows = len(columns[0])
+    text_columns = []
+    for j in range(0, num_columns):
+        text_column = []
+        for i in range(0, num_rows):
+            entry = columns[j][i]
+            if entry is None:
+                text_column.append("_")
+            else:
+                text_column.append(format % entry)
+        text_columns.append(text_column)
+
+    text_columns_and_labels_to_file(text_columns, labels, file_name)
+
+
+# ----------------------------------------------------------------
+# Print the data with left alignment.  E.g. if columns =
+# [['a', 'bcdef', 'ghi'], ['1234', '56', '789']], then this prints
+#
+# a     1234
+# bcdef 56
+# ghi   789
+
+
+def text_columns_to_file(columns, file_name):
+    text_columns_and_labels_to_file(columns, None, file_name)
+
+
+# ----------------------------------------------------------------
+# Print the data with left alignment.  E.g. if labels = ['name', 'number'] and
+# columns = [['a', 'bcdef', 'ghi'], ['1234', '56', '789']], then this prints
+#
+# #name  number
+# #----  ------
+# a      1234
+# bcdef  56
+# ghi    789
+
+
+def text_columns_and_labels_to_file(columns, labels, file_name):
+    num_columns = len(columns)
+    num_rows = len(columns[0])
+
+    # Find width of the longest entry or label in each column.
+    max_widths = [0] * num_columns
+    for j in range(0, num_columns):
+        column = columns[j]
+        max_width = 0
+        for entry in column:
+            width = len(entry)
+            if width > max_width:
+                max_width = width
+        if labels is not None:
+            width = len(labels[j])
+        if j == 0:
+            width += 1  # For the preceding # on the label line.
+        if width > max_width:
+            max_width = width
+        max_widths[j] = max_width
+
+    # Print the data with left alignment.
+    file_handle = open_file_or_die(file_name, "w")
+
+    if labels is not None:
+        # Column labels
+        for j in range(0, num_columns):
+            if j == 0:
+                file_handle.write("#%-*s" % (max_widths[j] - 1, labels[j]))
+            else:
+                file_handle.write(" %-*s" % (max_widths[j], labels[j]))
+        file_handle.write("\n")
+
+        # Dash lines
+        for j in range(0, num_columns):
+            if j == 0:
+                file_handle.write("#")
+                dashes = "-" * (max_widths[j] - 1)
+                file_handle.write(dashes)
+            else:
+                file_handle.write(" ")
+                dashes = "-" * (max_widths[j])
+                file_handle.write(dashes)
+        file_handle.write("\n")
+
+    # Data
+    for i in range(0, num_rows):
+        for j in range(0, num_columns):
+            if j > 0:
+                file_handle.write(" ")
+            file_handle.write("%-*s" % (max_widths[j], columns[j][i]))
+        file_handle.write("\n")
+    if file_name != "-":
+        file_handle.close()
+
+
+# ----------------------------------------------------------------
+# Print the data with left alignment.  E.g. if
+# rows = [['a', '1234'], ['bcdef', '56'], ['ghi', '789']], then this prints
+#
+# a     1234
+# bcdef 56
+# ghi   789
+
+# ----------------------------------------------------------------
+def text_rows_to_file(rows, file_name):
+    text_rows_and_labels_to_file(rows, None, file_name)
+
+
+# ----------------------------------------------------------------
+# Print the data with left alignment.  E.g. if labels = ['name', 'number'] and
+# rows = [['a', '1234'], ['bcdef', '56'], ['ghi', '789']], then this prints
+#
+# #name number
+# #---- ------
+# a     1234
+# bcdef 56
+# ghi   789
+
+
+def text_rows_and_labels_to_file(rows, labels, file_name):
+    num_rows = len(rows)
+    num_columns = len(rows[0])
+
+    # Find width of the longest entry or label in each column.
+    max_widths = [0] * num_columns
+    for j in range(0, num_columns):
+        max_width = 0
+        for i in range(0, num_rows):
+            entry = rows[i][j]
+            width = len(entry)
+            if width > max_width:
+                max_width = width
+
+        if labels is not None:
+            width = len(labels[j])
+            if j == 0:
+                width += 1  # For the preceding # on the label line.
+            if width > max_width:
+                max_width = width
+
+        max_widths[j] = max_width
+
+    # Print the data with left alignment.
+    file_handle = open_file_or_die(file_name, "w")
+
+    if labels is not None:
+        # Column labels
+        for j in range(0, num_columns):
+            if j == 0:
+                file_handle.write("#%-*s" % (max_widths[j] - 1, labels[j]))
+            else:
+                file_handle.write(" %-*s" % (max_widths[j], labels[j]))
+        file_handle.write("\n")
+
+        # Dash lines
+        for j in range(0, num_columns):
+            if j == 0:
+                file_handle.write("#")
+                dashes = "-" * (max_widths[j] - 1)
+                file_handle.write(dashes)
+            else:
+                file_handle.write(" ")
+                dashes = "-" * (max_widths[j])
+                file_handle.write(dashes)
+        file_handle.write("\n")
+
+    # Data
+    for i in range(0, num_rows):
+        for j in range(0, num_columns):
+            if j > 0:
+                file_handle.write(" ")
+            file_handle.write("%-*s" % (max_widths[j], rows[i][j]))
+        file_handle.write("\n")
+    if file_name != "-":
+        file_handle.close()
+
+
+# ----------------------------------------------------------------
+# Example:  if
+#
+#   Ls     = ['30', '40', '50']
+#   alphas = ['0.001', '0.002']
+#   table = [['6.730', '6.740', '6.750'], ['6.830', '6.840', '6.850']]
+#
+# i.e.
+#
+#   #L alpha=0.001 alpha=0.002
+#   #- ----------- -----------
+#   30 6.730       6.830
+#   40 6.740       6.840
+#   50 6.750       6.850
+#
+# then
+#
+#   hash = table_to_hash(Ls, alphas, table)
+#   for L in Ls:
+#     for alpha in alphas:
+#       print  hash[L][alpha],
+#     print
+#
+# prints
+#
+#   6.730 6.830
+#   6.740 6.840
+#   6.750 6.850
+
+
+def table_to_hash(left_labels, top_labels, columns):
+    hash = {}
+    for i in range(0, len(left_labels)):
+        left_label = left_labels[i]
+        hash[left_label] = {}
+        for j in range(0, len(top_labels)):
+            top_label = top_labels[j]
+            hash[left_label][top_label] = columns[j][i]
+
+    return hash
+
+
+# ----------------------------------------------------------------
+def text_array_to_float_array(text_array):
+    float_array = []
+    for entry in text_array:
+        float_array.append(float(entry))
+    return float_array
+
+
+# ----------------------------------------------------------------
+# Example:
+#
+# * matrix = [[1,2,3],[4,5,6]]
+# * row_index_name = 'x'
+# * row_index_values = [10, 20]
+# * col_index_name = 'y'
+# * col_index_values = [55, 66, 77]
+#
+# If transpose == False, output is as follows:
+#
+#   #x y=55 y=66 y=77
+#   #- ---- ---- ----
+#   10    1    2    3
+#   20    4    5    6
+#
+# If transpose == True, output is as follows:
+#
+#   #y x=10 x=20
+#   #- ---- ----
+#   55    1    4
+#   66    2    5
+#   77    3    6
+
+
+def matrix_and_labels_to_file(
+    matrix,
+    row_index_name,
+    row_index_values,
+    col_index_name,
+    col_index_values,
+    file_name,
+    transpose=False,
+    matrix_format="%11.7f",
+    label_format="%.7f",
+):
+
+    if not transpose:
+        # rows
+        long_rows = []
+        num_rows = len(matrix)
+        for i in range(0, num_rows):
+            short_row = matrix[i]
+            long_row = [row_index_values[i]] + short_row
+            long_rows.append(long_row)
+
+        # labels
+        labels = [row_index_name]
+        for col_index_value in col_index_values:
+            col_index_string = label_format % col_index_value
+            labels.append("%s=%s" % (col_index_name, col_index_string))
+
+        float_rows_and_labels_to_file(long_rows, labels, file_name, matrix_format)
+
+    else:
+        # columns
+        augmented_columns = [col_index_values] + matrix
+
+        # labels
+        labels = [col_index_name]
+        for row_index_value in row_index_values:
+            row_index_string = label_format % row_index_value
+            labels.append("%s=%s" % (row_index_name, row_index_string))
+
+        float_columns_and_labels_to_file(
+            augmented_columns, labels, file_name, matrix_format
+        )
+
 
 # ================================================================
 # Top-down programming style, please.
