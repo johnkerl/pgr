@@ -119,7 +119,6 @@ import sys
 import matplotlib
 import pylab
 
-
 # ----------------------------------------------------------------
 def usage():
     sys.stderr.write("Usage: %s [options] [file name]" % (sys.argv[0]))
@@ -137,6 +136,19 @@ Options:
   -legend 'y1 y2'        Specify legend labels.
   -lop                   Place the legend outside the plot.
   -lip                   Place the legend inside the plot.
+
+  -lur                   Place the legend at upper right
+  -lul                   Place the legend at upper left
+  -lll                   Place the legend at lower left
+  -llr                   Place the legend at lower right
+  -lr                    Place the legend at right
+  -lcl                   Place the legend at center left
+  -lcr                   Place the legend at center right
+  -llc                   Place the legend at lower center
+  -luc                   Place the legend at upper center
+  -lc                    Place the legend at center
+  -lbest                 Place the legend at matplotlib's "best" location
+
   -flabels (or -f)       Take x label and legend labels from the data file.
 
   -width {inches}        Specify figure width.
@@ -255,9 +267,9 @@ def main():
         for j in range(0, num_series):
             x_series[j] = file_columns[2 * j]
             y_series[j] = file_columns[2 * j + 1]
-            print
-            print("j=%d x_series=%s" % (j, str(x_series[j])))
-            print("j=%d y_series=%s" % (j, str(y_series[j])))
+            #print
+            #print("j=%d x_series=%s" % (j, str(x_series[j])))
+            #print("j=%d y_series=%s" % (j, str(y_series[j])))
 
     # Use line number as first column, if requested.
     elif opts["x_is_line_number"]:
@@ -391,7 +403,7 @@ def set_defaults():
         "xlabel": "",
         "ylabel": "",
         "do_legend": False,
-        "split_on_comma": True,
+        "split_on_comma": False,
         "x_is_line_number": False,
         "x_is_time": False,
         "multiple_x_columns": 0,
@@ -442,8 +454,26 @@ def set_defaults():
         "y_max": -1,
     }
 
-
 # ----------------------------------------------------------------
+# TODO: more online-help writeups
+#        elif sys.argv[argi] == "-d":  # -f and -t; dcat style
+#        elif sys.argv[argi] == "-k":  # my style
+#
+#----------------------------------------------------------------
+#        elif sys.argv[argi] == "-adjbottom":
+#        elif sys.argv[argi] == "-adjtop":
+#        elif sys.argv[argi] == "-adjleft":
+#        elif sys.argv[argi] == "-adjright":
+#
+#----------------------------------------------------------------
+#        elif sys.argv[argi] == "-lws":
+#        elif sys.argv[argi] == "-labels":
+#
+#----------------------------------------------------------------
+#        elif sys.argv[argi] == "-xshift":
+#        elif sys.argv[argi] == "-xmul":
+#
+
 def parse_command_line(opts):
     argc = len(sys.argv)
     argi = 1
@@ -750,7 +780,7 @@ def read_input_file(opts):
         if opts["x_is_line_number"]:
             legend_labels = all_labels
         elif opts["multiple_x_columns"]:
-            sys.stder.write("Sorry, I haven't written -flabels for -xyxy yet.")
+            sys.stderr.write("Sorry, I haven't written -flabels for -xyxy yet.")
             sys.exit(1)
         else:
             opts["xlabel"] = all_labels[0]  # xxx fix me for -n or -xyxy.
