@@ -89,6 +89,8 @@
 #   -errorbar or -eb       1st column is  x, 2nd is y, 3rd is err(y).
 #   -bar                   Plot a bar chart.
 #   -barwidth {w}          Specify bar width for -bar.
+#   -categorical or -cat   First column is category label, second is value;
+#                          categories on x-axis in input order.
 #   -grid                  Include a background grid.
 #   -lct                   Plot last column on top.
 #   -fct                   Plot first column on top.
@@ -192,6 +194,8 @@ Options:
   -errorbar or -eb       1st column is  x, 2nd is y, 3rd is err(y).
   -bar                   Plot a bar chart.
   -barwidth {w}          Specify bar width for -bar.
+  -categorical or -cat   First column is category label, second is value;
+                         categories on x-axis in input order.
   -lct                   Plot last column on top.
   -fct                   Plot first column on top.
 
@@ -213,6 +217,14 @@ def main():
     opts = set_defaults()
     parse_command_line(opts)
     (file_columns, legend_labels) = read_input_file(opts)
+
+    if opts["do_categorical"]:
+        if opts["multiple_x_columns"] or opts["x_is_line_number"] or opts["do_errorbar"] or opts["x_is_time"]:
+            sys.stderr.write(
+                "%s: -categorical cannot be used with -xyxy, -n, -errorbar, or -t.\n"
+                % sys.argv[0]
+            )
+            sys.exit(1)
 
     # debug tap:
     # float_columns_to_file(file_columns, '-')
@@ -413,6 +425,8 @@ def set_defaults():
         "do_bar": False,
         "bar_width": 0.8,
         "bar_width_given": 0,
+        "do_categorical": False,
+        "x_categories": None,
         "do_grid": 0,
         "first_column_on_top": False,
         "xshift": 0.0,
@@ -629,6 +643,8 @@ def parse_command_line(opts):
             opts["eb_is_var"] = True
         elif sys.argv[argi] == "-bar":
             opts["do_bar"] = True
+        elif sys.argv[argi] == "-categorical" or sys.argv[argi] == "-cat":
+            opts["do_categorical"] = True
         elif sys.argv[argi] == "-barwidth":
             argi += 1
             if argi >= argc:
@@ -775,6 +791,14 @@ def parse_command_line(opts):
 # ----------------------------------------------------------------
 def read_input_file(opts):
     legend_labels = []
+    if opts["do_categorical"]:
+        (categories, values) = categorical_columns_from_file(
+            opts["file_name"], opts["split_on_comma"]
+        )
+        opts["x_categories"] = categories
+        n = len(categories)
+        file_columns = [list(range(n)), values]
+        return (file_columns, legend_labels)
     if opts["use_file_labels"]:
         all_labels = labels_from_file(opts["file_name"], opts["split_on_comma"])
         if opts["x_is_line_number"]:
@@ -923,7 +947,7 @@ def plot_series(
             # Bar-chart plot.
             if opts["do_bar"]:
                 if len(colors) > 0:
-                    (plot_line,) = pylab.bar(
+                    plot_line = pylab.bar(
                         curr_x_series,
                         curr_y_series,
                         width=opts["bar_width"],
@@ -931,7 +955,7 @@ def plot_series(
                         color=colors[j % len(colors)],
                     )
                 else:
-                    (plot_line,) = pylab.bar(
+                    plot_line = pylab.bar(
                         curr_x_series,
                         curr_y_series,
                         width=opts["bar_width"],
@@ -1050,7 +1074,11 @@ def plot_series(
         # Write dates on the x axis vertically to avoid overlap
         fig.autofmt_xdate(bottom=opts["adjust_bottom"], rotation=90)
         # ax.xaxis.set_major_formatter(matplotlib.dates.DateFormatter('%Y%m%d-%H:%M:%S'))
+        ax = pylab.gca()
         ax.xaxis.set_major_formatter(matplotlib.dates.DateFormatter("%Y%m%d\n%H:%M:%S"))
+
+    if opts.get("x_categories") is not None:
+        pylab.xticks(range(len(opts["x_categories"])), opts["x_categories"])
 
     # Show the grid, if it was requested.
     if opts["do_grid"]:
@@ -1058,7 +1086,8 @@ def plot_series(
     # Show the legend, if it was requested.
     if opts["do_legend"]:
         if opts["legend_outside_plot"]:
-            pylab.figlegend(plot_lines_for_figlegend, legend_labels, opts["legend_loc"])
+            ###pylab.figlegend(plot_lines_for_figlegend, legend_labels, opts["legend_loc"])
+            pylab.figlegend(plot_lines_for_figlegend, legend_labels)
         else:
             pylab.legend(loc=opts["legend_loc"])
 
@@ -1216,6 +1245,30 @@ def text_columns_from_file(file_name, split_on_comma=False):
         file_handle.close()
 
     return columns
+
+
+# ----------------------------------------------------------------
+def categorical_columns_from_file(file_name, split_on_comma=False):
+    """Given an input file with two columns (category string, numeric value),
+    returns (categories, values). Categories are in input order; values are
+    floats with "_" and empty string converted to None. Requires exactly two
+    columns.
+    """
+    columns = text_columns_from_file(file_name, split_on_comma)
+    if len(columns) != 2:
+        sys.stderr.write(
+            "Categorical input requires exactly two columns; got %d.\n"
+            % (len(columns))
+        )
+        sys.exit(1)
+    categories = columns[0]
+    values = []
+    for entry in columns[1]:
+        if entry == "_" or entry == "":
+            values.append(None)
+        else:
+            values.append(float(entry))
+    return (categories, values)
 
 
 # ----------------------------------------------------------------
