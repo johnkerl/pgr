@@ -89,8 +89,8 @@
 #   -errorbar or -eb       1st column is  x, 2nd is y, 3rd is err(y).
 #   -bar                   Plot a bar chart.
 #   -barwidth {w}          Specify bar width for -bar.
-#   -categorical or -cat   First column is category label, second is value;
-#                          categories on x-axis in input order.
+#   -categorical or -cat   First column is category label; remaining columns
+#                          are value series; categories on x-axis in input order.
 #   -grid                  Include a background grid.
 #   -lct                   Plot last column on top.
 #   -fct                   Plot first column on top.
@@ -194,8 +194,8 @@ Options:
   -errorbar or -eb       1st column is  x, 2nd is y, 3rd is err(y).
   -bar                   Plot a bar chart.
   -barwidth {w}          Specify bar width for -bar.
-  -categorical or -cat   First column is category label, second is value;
-                         categories on x-axis in input order.
+  -categorical or -cat   First column is category label; remaining columns
+                         are value series; categories on x-axis in input order.
   -lct                   Plot last column on top.
   -fct                   Plot first column on top.
 
@@ -338,6 +338,8 @@ def main():
     formats = [format] * num_series
     if not opts["use_file_labels"]:
         legend_labels = [""] * num_series
+    elif len(legend_labels) < num_series:
+        legend_labels = list(legend_labels) + [""] * (num_series - len(legend_labels))
 
     # Use specified formats, if any.
     if opts["arg_formats"] != "":
@@ -792,12 +794,62 @@ def parse_command_line(opts):
 def read_input_file(opts):
     legend_labels = []
     if opts["do_categorical"]:
-        (categories, values) = categorical_columns_from_file(
-            opts["file_name"], opts["split_on_comma"]
-        )
+        columns = None
+        if opts["use_file_labels"] and opts["file_name"] == "-":
+            # Stdin: read header first, then data (can't re-open stdin for labels).
+            first_line = sys.stdin.readline()
+            if first_line == "":
+                sys.stderr.write("labels_from_file:  couldn't read line 1.\n")
+                sys.exit(1)
+            first_line = re.sub(r"^\s+", r"", first_line)
+            first_line = re.sub(r"^#+", r"", first_line)
+            if first_line.endswith("\n"):
+                first_line = first_line[:-1]
+            first_line = re.sub(r"^\s+", r"", first_line)
+            first_line = re.sub(r"\s+$", r"", first_line)
+            if opts["split_on_comma"]:
+                all_labels = first_line.split(",")
+            else:
+                all_labels = first_line.split()
+            opts["xlabel"] = all_labels[0]
+            legend_labels = list(all_labels[1:])
+            columns = text_columns_from_handle(sys.stdin, opts["split_on_comma"])
+        else:
+            columns = None
+        if columns is None:
+            (categories, value_columns) = categorical_columns_from_file(
+                opts["file_name"], opts["split_on_comma"]
+            )
+            if opts["use_file_labels"]:
+                all_labels = labels_from_file(
+                    opts["file_name"], opts["split_on_comma"]
+                )
+                opts["xlabel"] = all_labels[0]
+                legend_labels = list(all_labels[1:])
+        else:
+            if len(columns) < 2:
+                sys.stderr.write(
+                    "Categorical input requires at least two columns (category + one or more values); got %d.\n"
+                    % (len(columns))
+                )
+                sys.exit(1)
+            categories = columns[0]
+            value_columns = []
+            for col in columns[1:]:
+                values = []
+                for entry in col:
+                    if entry == "_" or entry == "":
+                        values.append(None)
+                    else:
+                        values.append(float(entry))
+                value_columns.append(values)
         opts["x_categories"] = categories
         n = len(categories)
-        file_columns = [list(range(n)), values]
+        file_columns = [list(range(n))] + value_columns
+        num_series = len(value_columns)
+        if opts["use_file_labels"]:
+            while len(legend_labels) < num_series:
+                legend_labels.append("")
         return (file_columns, legend_labels)
     if opts["use_file_labels"]:
         all_labels = labels_from_file(opts["file_name"], opts["split_on_comma"])
@@ -1248,27 +1300,70 @@ def text_columns_from_file(file_name, split_on_comma=False):
 
 
 # ----------------------------------------------------------------
+def text_columns_from_handle(file_handle, split_on_comma=False):
+    """Like text_columns_from_file but reads from an already-open handle.
+    Does not skip the first line (caller may have consumed it as a header).
+    """
+    columns = []
+    num_fields = -1
+
+    while 1:
+        line = file_handle.readline()
+        if line == "":
+            break
+
+        if line[-1] == "\n":
+            line = line[0:-1]
+        line = re.sub(r"#.*", r"", line)
+        line = re.sub(r"^\s+", r"", line)
+        line = re.sub(r"\s+$", r"", line)
+        if re.match(r"^$", line):
+            continue
+
+        if split_on_comma:
+            fields = line.split(",")
+        else:
+            fields = line.split()
+        curr_num_fields = len(fields)
+
+        if num_fields == -1:
+            num_fields = curr_num_fields
+            for j in range(0, num_fields):
+                columns.append([])
+        elif curr_num_fields != num_fields:
+            sys.stderr.write("Ragged input in stream.\n")
+            sys.exit(1)
+        for j in range(0, num_fields):
+            columns[j].append(fields[j])
+
+    return columns
+
+
+# ----------------------------------------------------------------
 def categorical_columns_from_file(file_name, split_on_comma=False):
-    """Given an input file with two columns (category string, numeric value),
-    returns (categories, values). Categories are in input order; values are
-    floats with "_" and empty string converted to None. Requires exactly two
-    columns.
+    """Given an input file with column 0 = category labels and columns 1..k =
+    numeric value series, returns (categories, value_columns). Categories are
+    in input order; each value column is a list of floats with "_" and empty
+    string converted to None. Requires at least two columns.
     """
     columns = text_columns_from_file(file_name, split_on_comma)
-    if len(columns) != 2:
+    if len(columns) < 2:
         sys.stderr.write(
-            "Categorical input requires exactly two columns; got %d.\n"
+            "Categorical input requires at least two columns (category + one or more values); got %d.\n"
             % (len(columns))
         )
         sys.exit(1)
     categories = columns[0]
-    values = []
-    for entry in columns[1]:
-        if entry == "_" or entry == "":
-            values.append(None)
-        else:
-            values.append(float(entry))
-    return (categories, values)
+    value_columns = []
+    for col in columns[1:]:
+        values = []
+        for entry in col:
+            if entry == "_" or entry == "":
+                values.append(None)
+            else:
+                values.append(float(entry))
+        value_columns.append(values)
+    return (categories, value_columns)
 
 
 # ----------------------------------------------------------------
