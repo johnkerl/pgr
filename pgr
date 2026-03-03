@@ -1138,8 +1138,7 @@ def plot_series(
     # Show the legend, if it was requested.
     if opts["do_legend"]:
         if opts["legend_outside_plot"]:
-            ###pylab.figlegend(plot_lines_for_figlegend, legend_labels, opts["legend_loc"])
-            pylab.figlegend(plot_lines_for_figlegend, legend_labels)
+            pylab.figlegend(plot_lines_for_figlegend, legend_labels, loc=opts["legend_loc"])
         else:
             pylab.legend(loc=opts["legend_loc"])
 
