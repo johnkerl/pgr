@@ -231,7 +231,7 @@ def main():
 
     # Do line plot.
     if opts["do_lines"]:
-        #        plot_lines(file_columns, opts)
+        plot_lines(file_columns, opts)
         sys.exit(0)
 
     # Rearrange file columns into some combination of x, y, and error-bar series.
@@ -1192,15 +1192,33 @@ def plot_lines(data_columns, opts):
     y2s = data_columns[3]
 
     pylab.figure(1, figsize=(opts["width_inches"], opts["height_inches"]))
+    fig = pylab.gcf()
+    fig.subplots_adjust(
+        bottom=opts["adjust_bottom"],
+        top=opts["adjust_top"],
+        left=opts["adjust_left"],
+        right=opts["adjust_right"],
+    )
+
     num_points = len(x1s)
+    line_width = opts["line_widths"][0] if opts["line_widths"] else 1
     for k in range(0, num_points):
         x = [x1s[k], x2s[k]]
         y = [y1s[k], y2s[k]]
-        pylab.plot(x, y, fmt, markeredgewidth=0, markersize=1)
+        pylab.plot(
+            x,
+            y,
+            fmt,
+            markeredgewidth=0,
+            markersize=opts["marker_size"],
+            linewidth=line_width,
+        )
+    pylab.xlabel(opts["xlabel"])
+    pylab.ylabel(opts["ylabel"])
     pylab.title(opts["title"])
 
     # Put four decimal places in mouseovers.
-    ax = pylab.axes()
+    ax = pylab.gca()
     ax.fmt_xdata = lambda x: "%.4f" % x
     ax.fmt_ydata = lambda y: "%.4f" % y
 
